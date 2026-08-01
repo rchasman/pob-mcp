@@ -59,12 +59,28 @@ end
 -- Upstream's PassiveSpec:ImportFromNodeList gained a leading className
 -- parameter (9 params incl. self, up from 8). Detect which signature the
 -- loaded checkout has so both old and current PoB versions work.
+--
+-- ImportFromNodeList also refuses to allocate a Mastery node that has no
+-- effect selected in the `mastery` table, silently dropping it instead. Every
+-- tree-mutation entry point (set_tree, update_tree_delta) funnels through
+-- here, so the merge lives at this chokepoint: the spec's current selections
+-- are merged underneath whatever the caller supplies, and caller-supplied
+-- ids/effects are coerced to numbers. That way the invariant holds for every
+-- caller, present and future, instead of each one having to re-implement it.
 function M.import_from_node_list(spec, classId, ascendId, secondaryId, nodes, overrides, mastery, treeVersion)
+  local mergedMastery = {}
+  for k, v in pairs(spec.masterySelections or {}) do mergedMastery[k] = v end
+  if type(mastery) == 'table' then
+    for nodeId, effectId in pairs(mastery) do
+      mergedMastery[tonumber(nodeId) or nodeId] = tonumber(effectId) or effectId
+    end
+  end
+
   local info = debug and debug.getinfo and debug.getinfo(spec.ImportFromNodeList, 'u')
   if info and info.nparams and info.nparams >= 9 then
-    return spec:ImportFromNodeList(nil, classId, ascendId, secondaryId, nodes, overrides or {}, mastery or {}, treeVersion)
+    return spec:ImportFromNodeList(nil, classId, ascendId, secondaryId, nodes, overrides or {}, mergedMastery, treeVersion)
   end
-  return spec:ImportFromNodeList(classId, ascendId, secondaryId, nodes, overrides or {}, mastery or {}, treeVersion)
+  return spec:ImportFromNodeList(classId, ascendId, secondaryId, nodes, overrides or {}, mergedMastery, treeVersion)
 end
 
 local MIN_PLAYER_LEVEL = 1
@@ -235,14 +251,29 @@ function M.update_tree_delta(params)
   local nodes = {}
   for id,_ in pairs(set) do table.insert(nodes, id) end
   table.sort(nodes)
-  local mastery = current.masteryEffects or {}
+
   local classId = params.classId or current.classId or 0
   local ascendId = params.ascendClassId or current.ascendClassId or 0
   local secId = params.secondaryAscendClassId or current.secondaryAscendClassId or 0
   local tv = params.treeVersion or current.treeVersion
-  M.import_from_node_list(build.spec, tonumber(classId) or 0, tonumber(ascendId) or 0, tonumber(secId) or 0, nodes, {}, mastery, tv)
+  -- import_from_node_list merges the spec's existing mastery selections
+  -- underneath params.masteryEffects itself, so a bare pass-through is enough.
+  M.import_from_node_list(build.spec, tonumber(classId) or 0, tonumber(ascendId) or 0, tonumber(secId) or 0, nodes, {}, params and params.masteryEffects, tv)
   M.get_main_output()
-  return true
+
+  -- Report what PoB actually allocated. Requesting a node is not the same as
+  -- getting it: disconnected nodes and effect-less masteries are dropped.
+  local after = M.get_tree()
+  local allocated = {}
+  for _, id in ipairs(after and after.nodes or {}) do allocated[id] = true end
+  local dropped = {}
+  if params and type(params.addNodes) == 'table' then
+    for _, id in ipairs(params.addNodes) do
+      local n = tonumber(id)
+      if n and not allocated[n] then table.insert(dropped, n) end
+    end
+  end
+  return { tree = after, droppedNodes = dropped }
 end
 
 

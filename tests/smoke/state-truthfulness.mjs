@@ -69,6 +69,26 @@ try {
     check('mastery without an effect is reported as dropped',
       (withoutEffect.droppedNodes ?? []).includes(masteryId),
       `dropped=${JSON.stringify(withoutEffect.droppedNodes)}`);
+
+    // set_tree passed masterySelections straight through with no fallback, so
+    // any call that didn't re-specify every mastery's effect silently wiped
+    // it — ImportFromNodeList only requires masterySelections[id] be truthy,
+    // not a real effect id, so an arbitrary one is enough to allocate here.
+    const withEffect = await client.updateTreeDelta({ addNodes: [masteryId], masteryEffects: { [masteryId]: 1 } });
+    check('mastery with an effect is allocated',
+      Object.prototype.hasOwnProperty.call(withEffect.tree?.masteryEffects ?? {}, masteryId),
+      `masteryEffects=${JSON.stringify(withEffect.tree?.masteryEffects)}`);
+
+    const resetTree = await client.setTree({
+      classId: withEffect.tree.classId,
+      ascendClassId: withEffect.tree.ascendClassId,
+      secondaryAscendClassId: withEffect.tree.secondaryAscendClassId,
+      nodes: withEffect.tree.nodes,
+      treeVersion: withEffect.tree.treeVersion,
+    });
+    check('set_tree preserves an already-allocated mastery with no masteryEffects arg',
+      Object.prototype.hasOwnProperty.call(resetTree.masteryEffects ?? {}, masteryId),
+      `masteryEffects=${JSON.stringify(resetTree.masteryEffects)}`);
   }
   if (failures.length) throw new Error(`${failures.length} check(s) failed: ${failures.join(', ')}`);
   console.log('\nstate-truthfulness smoke passed');
