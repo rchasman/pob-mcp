@@ -1189,9 +1189,10 @@ function M.get_mastery_options()
     if node and node.isMastery and node.masteryEffects then
       local allocated = spec.masterySelections and spec.masterySelections[nodeId]
       local available = {}
-      for effectId, effectData in pairs(node.masteryEffects) do
-        local stat = effectData.sd and table.concat(effectData.sd, ', ') or tostring(effectId)
-        table.insert(available, { effectId = effectId, stat = stat })
+      -- node.masteryEffects is an array of { effect = <id>, stats = {...} }.
+      for _, effectData in ipairs(node.masteryEffects) do
+        local stat = effectData.stats and table.concat(effectData.stats, ', ') or tostring(effectData.effect)
+        table.insert(available, { effectId = effectData.effect, stat = stat })
       end
       table.insert(result, {
         nodeId = nodeId,
