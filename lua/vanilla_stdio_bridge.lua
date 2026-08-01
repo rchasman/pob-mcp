@@ -18,8 +18,18 @@ dofile('HeadlessWrapper.lua')
 
 local BuildOps = dofile(ADAPTER_DIR .. 'pob_ops.lua')
 
+-- json.encode raises on cycles, NaN and functions. An uncaught raise here kills
+-- the process and takes the caller's loaded build with it, so a payload we
+-- cannot serialise must degrade into an error response, never a crash.
 local function reply(value)
-  io.write(json.encode(value), '\n')
+  local ok, encoded = pcall(json.encode, value)
+  if not ok then
+    encoded = json.encode({
+      ok = false,
+      error = 'response could not be serialised: ' .. tostring(encoded),
+    })
+  end
+  io.write(encoded, '\n')
   io.flush()
 end
 
