@@ -49,7 +49,7 @@ node.y = node.group.y - cos(node.angle) * orbitRadii[node.o + 1]
 | `gen_tree.lua` | passive tree SVG, `ICON:` placeholders for art |
 | `icons.py` | crops sprite icons to base64 data URIs |
 | `gen_asc.lua` | ascendancy inset, allocated vs planned route |
-| `items.py` | PoE-style item tooltips from the build XML |
+| `items.py` | fallback item tooltips, superseded by the library below |
 | `gems.py` | socket groups with levels and quality |
 
 Crop the tree to the bounding box of allocated **non-ascendancy** nodes. Ascendancy nodes sit far off the main tree and will blow the viewBox out to nothing-but-whitespace.
@@ -65,6 +65,34 @@ rsvg-convert -w 1000 preview.svg -o preview.png   # then Read the png
 ```
 
 rsvg does not resolve CSS custom properties, so substitute concrete colours into the preview copy only.
+
+## Items
+
+Use **poe-item-render** rather than hand-rolling tooltip markup. It parses both
+item-text dialects (game clipboard and Path of Building export) and renders the
+in-game frame.
+
+```js
+import { renderItems } from "poe-item-render";
+import { extractArtworkTheme } from "poe-item-render/node";
+import { readBuild } from "poe-item-render/examples/build-page.js";
+
+const html = renderItems(readBuild(buildXmlPath), {
+  annotate: (mod) => (DEAD.test(mod.text) ? "inert under Roiling Tempest" : null),
+});
+const css = baseCss + extractArtworkTheme({ rarities: ["rare", "unique"] });
+```
+
+The `annotate` hook is what makes a dossier tooltip better than a screenshot:
+findings land on the mod they concern instead of in a paragraph further down.
+
+**Shrink the theme before shipping.** The library emits artwork at source
+resolution to stay dependency-free. Headers drawn at 44 px do not need 88 px
+art, and downscaling took one page from 554 KB to 399 KB. `scripts/shrink_theme.py`
+rewrites the inlined PNGs in a generated stylesheet.
+
+**The artwork is not redistributable.** It is Grinding Gear Games'. Local pages
+are fine; anything you publish should use the artwork-free stylesheet.
 
 ## Prices
 
