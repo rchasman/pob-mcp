@@ -123,7 +123,7 @@ npm run build
         "POB_DIRECTORY": "/path/to/your/Path of Building/Builds",
         "POB_LUA_ENABLED": "true",
         "POB_PATH": "/path/to/PathOfBuilding/src",
-        "POB_CMD": "/usr/local/bin/luajit",
+        "POB_CMD": "/opt/homebrew/bin/luajit",
         "POB_TIMEOUT_MS": "10000"
       }
     }
@@ -162,7 +162,24 @@ sudo apt-get install luajit
 # Windows: download from https://luajit.org/ and add to PATH
 ```
 
-#### 2. Clone PathOfBuilding
+#### 2. Install PoB's Lua C modules (macOS and Linux)
+
+PoB commits its C modules to `runtime/` as Windows `.dll` builds only, so a checkout
+cannot supply them anywhere else. Without this step the bridge appears to hang and
+then times out, because PoB reports `module 'lua-utf8' not found` and waits for a
+keypress that never comes.
+
+```bash
+luarocks --lua-version=5.1 --local install luautf8
+
+# Homebrew LuaJIT needs to be pointed at explicitly:
+luarocks --lua-version=5.1 --lua-dir=$(brew --prefix luajit) --local install luautf8
+```
+
+The bridge already searches `~/.luarocks/lib/lua/5.1`, so `--local` is enough and no
+extra configuration is required. Windows users can skip this: the bundled DLLs are used.
+
+#### 3. Clone PathOfBuilding
 ```bash
 git clone https://github.com/PathOfBuildingCommunity/PathOfBuilding.git
 ```
@@ -208,13 +225,13 @@ npm run test:smoke:crafting
 
 This verifies that the crafting advisor obtains current currency rates and base-mod data for a known item base through MCP.
 
-#### 3. Verify
+#### 4. Verify
 ```bash
 luajit -v
 ls /path/to/PathOfBuilding/src/HeadlessWrapper.lua
 ```
 
-#### 4. Update Claude Desktop config and restart Claude Desktop
+#### 5. Update Claude Desktop config and restart Claude Desktop
 
 ---
 
