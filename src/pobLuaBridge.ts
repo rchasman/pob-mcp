@@ -8,6 +8,24 @@ type LuaRequest = { action: string; params?: Record<string, unknown> };
 /** Lua bridge response envelope — always an object with at minimum `ok: boolean` */
 type LuaResponse = { ok: boolean; error?: string; [key: string]: unknown };
 
+const ROCK_BY_LUA_MODULE: Record<string, string> = {
+  "lua-utf8": "luautf8",
+};
+
+/** PoB reports this on stdout and then blocks, so the bare symptom is a startup timeout. */
+function missingLuaModuleMessage(moduleName: string): string {
+  const rock = ROCK_BY_LUA_MODULE[moduleName];
+  return (
+    `Failed to start PoB Lua Bridge: PoB could not load the Lua module '${moduleName}'.\n\n` +
+    `PoB's C modules are committed to runtime/ as Windows .dll builds only, so a fresh\n` +
+    `PathOfBuilding checkout cannot supply them on macOS or Linux.\n\n` +
+    `Install it for LuaJIT (Lua 5.1):\n` +
+    `  luarocks --lua-version=5.1 --local install ${rock ?? moduleName}\n\n` +
+    `On Homebrew LuaJIT, add --lua-dir=$(brew --prefix luajit).\n` +
+    `This bridge already searches ~/.luarocks/lib/lua/5.1, so no extra config is needed.`
+  );
+}
+
 export interface PoBLuaApiOptions {
   cwd?: string;
   cmd?: string; // default: 'luajit'
@@ -163,6 +181,10 @@ export class PoBLuaApiClient {
 
         // Skip empty lines or lines that don't start with '{'
         if (!ready.trim() || !ready.trim().startsWith('{')) {
+          const missingModule = ready.match(/module '([\w.\-]+)' not found/);
+          if (missingModule) {
+            throw new Error(missingLuaModuleMessage(missingModule[1]));
+          }
           continue;
         }
 
