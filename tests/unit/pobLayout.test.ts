@@ -44,16 +44,6 @@ describe('resolvePoBLayout', () => {
     expect(layout.luaPath[0]).toBe(path.join('/repo', 'runtime', 'lua', '?.lua'));
   });
 
-  // sha1 ships as a directory module, so omitting this entry breaks build loading
-  // while still letting the bridge emit its ready banner
-  it('should always include the ?/init.lua entry for directory modules', () => {
-    present.add('/repo/runtime');
-
-    const layout = resolvePoBLayout('/repo/src');
-
-    expect(layout.luaPath).toContain(path.join('/repo', 'runtime', 'lua', '?', 'init.lua'));
-  });
-
   it('should search the checkout runtime before luarocks', () => {
     present.add('/repo/runtime');
 
@@ -74,6 +64,10 @@ describe('resolvePoBLayout', () => {
     expect(layout.src).toBe(APP_SRC);
     // the bundle ships .dylib, not .so
     expect(layout.luaCPath[0]).toBe(path.join(BUNDLE, 'Contents', 'MacOS', '?.dylib'));
+    // sha1 ships as a directory module. Dropping this entry breaks build loading
+    // *after* the bridge has already emitted its ready banner, so the failure
+    // surfaces as "build not initialized" on the first real request.
+    expect(layout.luaPath).toContain(path.join(BUNDLE_LUA, '?', 'init.lua'));
   });
 
   it('should fall back to the bundled src when the app has never been launched', () => {
@@ -106,10 +100,13 @@ describe('resolvePoBLayout', () => {
 });
 
 describe('defaultBuildsDirectory', () => {
-  it('should prefer the location the current macOS port writes to', () => {
+  // Both exist on a machine that used the old Qt port and then the current one,
+  // which is the only case where the preference is observable
+  it('should prefer the current port when both locations exist', () => {
     setPlatform('darwin');
     const appSupport = path.join(os.homedir(), 'Library', 'Application Support', 'Path of Building', 'Builds');
     present.add(appSupport);
+    present.add(path.join(os.homedir(), 'Path of Building', 'Builds'));
 
     expect(defaultBuildsDirectory()).toBe(appSupport);
   });
