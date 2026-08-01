@@ -235,14 +235,38 @@ function M.update_tree_delta(params)
   local nodes = {}
   for id,_ in pairs(set) do table.insert(nodes, id) end
   table.sort(nodes)
-  local mastery = current.masteryEffects or {}
+
+  -- PassiveSpec:ImportFromNodeList refuses to allocate a Mastery node that has
+  -- no effect selected, so callers must be able to supply the effect in the
+  -- same call. Merge requested selections over the build's existing ones.
+  local mastery = {}
+  for k, v in pairs(current.masteryEffects or {}) do mastery[k] = v end
+  if params and type(params.masteryEffects) == 'table' then
+    for nodeId, effectId in pairs(params.masteryEffects) do
+      mastery[tonumber(nodeId) or nodeId] = tonumber(effectId) or effectId
+    end
+  end
+
   local classId = params.classId or current.classId or 0
   local ascendId = params.ascendClassId or current.ascendClassId or 0
   local secId = params.secondaryAscendClassId or current.secondaryAscendClassId or 0
   local tv = params.treeVersion or current.treeVersion
   M.import_from_node_list(build.spec, tonumber(classId) or 0, tonumber(ascendId) or 0, tonumber(secId) or 0, nodes, {}, mastery, tv)
   M.get_main_output()
-  return true
+
+  -- Report what PoB actually allocated. Requesting a node is not the same as
+  -- getting it: disconnected nodes and effect-less masteries are dropped.
+  local after = M.get_tree()
+  local allocated = {}
+  for _, id in ipairs(after and after.nodes or {}) do allocated[id] = true end
+  local dropped = {}
+  if params and type(params.addNodes) == 'table' then
+    for _, id in ipairs(params.addNodes) do
+      local n = tonumber(id)
+      if n and not allocated[n] then table.insert(dropped, n) end
+    end
+  end
+  return { tree = after, droppedNodes = dropped }
 end
 
 

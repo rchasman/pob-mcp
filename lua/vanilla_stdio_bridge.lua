@@ -189,9 +189,9 @@ handlers.set_tree = function(params)
 end
 
 handlers.update_tree_delta = function(params)
-  local ok2, err = BuildOps.update_tree_delta(params or {})
-  if not ok2 then return { ok = false, error = err } end
-  return { ok = true, tree = (BuildOps.get_tree()) }
+  local result, err = BuildOps.update_tree_delta(params or {})
+  if not result then return { ok = false, error = err } end
+  return { ok = true, tree = result.tree, droppedNodes = result.droppedNodes }
 end
 
 handlers.set_config = function(params)

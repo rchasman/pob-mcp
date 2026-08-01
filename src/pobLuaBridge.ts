@@ -478,10 +478,15 @@ async setTree(params: {
     return res.results;
   }
 
-  async updateTreeDelta(params: { addNodes?: number[]; removeNodes?: number[]; classId?: number; ascendClassId?: number; secondaryAscendClassId?: number; treeVersion?: string; }): Promise<{ tree: any; autoPathedNodes?: number[]; skippedAscendancyNodes?: number[] }> {
+  async updateTreeDelta(params: { addNodes?: number[]; removeNodes?: number[]; masteryEffects?: Record<string, number>; classId?: number; ascendClassId?: number; secondaryAscendClassId?: number; treeVersion?: string; }): Promise<{ tree: any; autoPathedNodes?: number[]; skippedAscendancyNodes?: number[]; droppedNodes?: number[] }> {
     const res = await this.send({ action: "update_tree_delta", params });
     if (!res.ok) throw new Error(res.error || "update_tree_delta failed");
-    return { tree: res.tree, autoPathedNodes: res.autoPathedNodes as number[] | undefined, skippedAscendancyNodes: res.skippedAscendancyNodes as number[] | undefined };
+    return {
+      tree: res.tree,
+      autoPathedNodes: res.autoPathedNodes as number[] | undefined,
+      skippedAscendancyNodes: res.skippedAscendancyNodes as number[] | undefined,
+      droppedNodes: res.droppedNodes as number[] | undefined,
+    };
   }
 
   async calcWith(params: { addNodes?: number[]; removeNodes?: number[]; masteryEffects?: Record<string | number, number>; useFullDPS?: boolean }): Promise<any> {
