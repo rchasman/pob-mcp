@@ -79,6 +79,24 @@ try {
       Object.prototype.hasOwnProperty.call(withEffect.tree?.masteryEffects ?? {}, masteryId),
       `masteryEffects=${JSON.stringify(withEffect.tree?.masteryEffects)}`);
 
+    // get_mastery_options iterated node.masteryEffects (an array of
+    // { effect, stats }) with pairs() and read a nonexistent `.sd` field, so
+    // every option silently degraded to its array position (1, 2, 3...)
+    // instead of the real stat text. A foreign-ascendancy mastery has no real
+    // options for this character, so this needs a native one specifically.
+    const nativeMasteryId = await findAllocatableMastery(client, tree, { ownAscendancyOnly: true });
+    if (nativeMasteryId == null) {
+      console.log('skip  mastery options check (no native mastery node in example build)');
+    } else {
+      await client.updateTreeDelta({ addNodes: [nativeMasteryId], masteryEffects: { [nativeMasteryId]: 1 } });
+      const options = await client.getMasteryOptions();
+      const thisMastery = (options?.masteries ?? []).find((m) => m.nodeId === nativeMasteryId);
+      const optionStats = (thisMastery?.availableEffects ?? []).map((e) => e.stat);
+      check('mastery options report real stat text, not array-index placeholders',
+        optionStats.length > 0 && optionStats.every((s) => /[a-zA-Z]/.test(String(s))),
+        `stats=${JSON.stringify(optionStats)}`);
+    }
+
     const resetTree = await client.setTree({
       classId: withEffect.tree.classId,
       ascendClassId: withEffect.tree.ascendClassId,
@@ -98,13 +116,19 @@ try {
 
 // The example build's tree differs from any given user's, so discover a mastery
 // node adjacent to it rather than hardcoding an ID.
-async function findAllocatableMastery(c, tree) {
+async function findAllocatableMastery(c, tree, { ownAscendancyOnly = false } = {}) {
   const allocated = new Set(tree.nodes);
+  const ownAscendancy = ownAscendancyOnly ? (await c.getBuildInfo())?.ascendClassName ?? '' : null;
   for (const keyword of ['mastery']) {
     try {
       const res = await c.searchNodes({ keyword, nodeType: 'mastery', maxResults: 30, includeAllocated: false });
       for (const node of res?.nodes ?? []) {
-        if (!allocated.has(Number(node.id))) return Number(node.id);
+        // A mastery tagged with a foreign ascendancyName belongs to a class this
+        // character isn't, so it has no real effect options for this build —
+        // only reject those when the caller specifically needs a native one.
+        const ascendancy = node.ascendancy ?? node.ascendancyName ?? '';
+        const isForeignAscendancy = ownAscendancyOnly && ascendancy !== '' && ascendancy !== ownAscendancy;
+        if (!isForeignAscendancy && !allocated.has(Number(node.id))) return Number(node.id);
       }
     } catch { /* search unavailable; skip the mastery checks */ }
   }
