@@ -2,6 +2,7 @@ import { spawn, ChildProcessWithoutNullStreams } from "child_process";
 import { EventEmitter } from "events";
 import path from "path";
 import os from "os";
+import { resolvePoBLayout } from "./utils/pobLayout.js";
 
 /** Lua bridge request envelope */
 type LuaRequest = { action: string; params?: Record<string, unknown> };
@@ -51,9 +52,9 @@ export class PoBLuaApiClient {
   constructor(options: PoBLuaApiOptions = {}) {
     // Prevent unhandled 'error' events (emitted on process exit) from crashing Node.js
     this.dataEmitter.on("error", () => {});
-    const forkSrc = options.cwd || process.env.POB_PATH || process.env.POB_FORK_PATH || path.join(os.homedir(), "Projects", "PathOfBuilding", "src");
+    const forkSrc = options.cwd || process.env.POB_PATH || process.env.POB_FORK_PATH;
     this.options = {
-      cwd: forkSrc,
+      cwd: forkSrc,  // may be undefined; resolved by layout detection in start()
       cmd: options.cmd || "luajit",
       args: options.args || ["HeadlessWrapper.lua"],
       env: options.env || {},
@@ -71,29 +72,18 @@ export class PoBLuaApiClient {
     this.ready = false;
     this.buffer = "";
 
-    // Set up Lua paths for runtime modules
-    const pobForkPath = this.options.cwd!;
+    const layout = resolvePoBLayout(this.options.cwd);
+    this.options.cwd = layout.src;
 
-    // Cross-platform path handling: remove 'src' from the end if present
-    const baseDir = pobForkPath.endsWith(path.sep + 'src') || pobForkPath.endsWith('/src')
-      ? pobForkPath.slice(0, -4)
-      : pobForkPath;
-    const runtimeDir = path.join(baseDir, 'runtime');
-    const runtimeLuaPath = path.join(runtimeDir, 'lua');
-    const luaRocksPath = path.join(os.homedir(), '.luarocks', 'lib', 'lua', '5.1');
-
-    // Platform-specific Lua paths
-    const isWindows = process.platform === 'win32';
-    const luaExt = isWindows ? 'dll' : 'so';
-
-    // Lua's package.path/cpath list separator is ';' on ALL platforms
+    // ';' separates entries on ALL platforms; trailing ';;' appends Lua's defaults
     const luaSep = ';';
+    const toSearchPath = (entries: string[]) => entries.join(luaSep) + luaSep + luaSep;
 
     const env = {
       ...process.env,
       POB_API_STDIO: "1",
-      LUA_PATH: `${runtimeLuaPath}${path.sep}?.lua${luaSep}${runtimeLuaPath}${path.sep}?${path.sep}init.lua${luaSep}${luaSep}`,
-      LUA_CPATH: `${runtimeDir}${path.sep}?.${luaExt}${luaSep}${luaRocksPath}${path.sep}?.${luaExt}${luaSep}${luaSep}`,
+      LUA_PATH: toSearchPath(layout.luaPath),
+      LUA_CPATH: toSearchPath(layout.luaCPath),
       ...this.options.env,
     } as NodeJS.ProcessEnv;
 
