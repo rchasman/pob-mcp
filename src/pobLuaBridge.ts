@@ -9,16 +9,11 @@ type LuaRequest = { action: string; params?: Record<string, unknown> };
 /** Lua bridge response envelope — always an object with at minimum `ok: boolean` */
 type LuaResponse = { ok: boolean; error?: string; [key: string]: unknown };
 
-/** LuaRocks rock names for the PoB C modules that have no non-Windows build in the repo. */
 const ROCK_BY_LUA_MODULE: Record<string, string> = {
   "lua-utf8": "luautf8",
 };
 
-/**
- * PoB reports a missing C module on stdout, never emits a ready banner, and then
- * blocks on a "press Enter to dismiss" prompt, so the bare symptom is a startup
- * timeout. Explain the actual cause instead.
- */
+/** PoB reports this on stdout and then blocks, so the bare symptom is a startup timeout. */
 function missingLuaModuleMessage(moduleName: string): string {
   const rock = ROCK_BY_LUA_MODULE[moduleName];
   return (
@@ -59,7 +54,7 @@ export class PoBLuaApiClient {
     this.dataEmitter.on("error", () => {});
     const forkSrc = options.cwd || process.env.POB_PATH || process.env.POB_FORK_PATH;
     this.options = {
-      cwd: forkSrc,  // may be undefined; resolved against the detected layout in start()
+      cwd: forkSrc,  // may be undefined; resolved by layout detection in start()
       cmd: options.cmd || "luajit",
       args: options.args || ["HeadlessWrapper.lua"],
       env: options.env || {},
@@ -77,12 +72,10 @@ export class PoBLuaApiClient {
     this.ready = false;
     this.buffer = "";
 
-    // A checkout and an installed PoB.app hold the engine in different shapes
     const layout = resolvePoBLayout(this.options.cwd);
     this.options.cwd = layout.src;
 
-    // Lua's package.path/cpath list separator is ';' on ALL platforms.
-    // The trailing ';;' appends Lua's own defaults.
+    // ';' separates entries on ALL platforms; trailing ';;' appends Lua's defaults
     const luaSep = ';';
     const toSearchPath = (entries: string[]) => entries.join(luaSep) + luaSep + luaSep;
 

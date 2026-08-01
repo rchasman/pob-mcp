@@ -2,7 +2,7 @@ import { describe, it, expect, jest, beforeEach, afterAll } from '@jest/globals'
 import path from 'path';
 import os from 'os';
 
-// The resolver decides purely on which paths exist, so drive it with a fake fs
+// The resolver decides on which paths exist, so drive it with a fake fs
 const present = new Set<string>();
 jest.mock('fs', () => ({
   __esModule: true,
@@ -64,9 +64,8 @@ describe('resolvePoBLayout', () => {
     expect(layout.src).toBe(APP_SRC);
     // the bundle ships .dylib, not .so
     expect(layout.luaCPath[0]).toBe(path.join(BUNDLE, 'Contents', 'MacOS', '?.dylib'));
-    // sha1 ships as a directory module. Dropping this entry breaks build loading
-    // *after* the bridge has already emitted its ready banner, so the failure
-    // surfaces as "build not initialized" on the first real request.
+    // sha1 is a directory module; dropping this breaks loading only *after* the
+    // ready banner, surfacing as "build not initialized" on the first request
     expect(layout.luaPath).toContain(path.join(BUNDLE_LUA, '?', 'init.lua'));
   });
 
@@ -100,8 +99,7 @@ describe('resolvePoBLayout', () => {
 });
 
 describe('defaultBuildsDirectory', () => {
-  // Both exist on a machine that used the old Qt port and then the current one,
-  // which is the only case where the preference is observable
+  // Only observable when both exist, as on a machine that used the old port first
   it('should prefer the current port when both locations exist', () => {
     setPlatform('darwin');
     const appSupport = path.join(os.homedir(), 'Library', 'Application Support', 'Path of Building', 'Builds');

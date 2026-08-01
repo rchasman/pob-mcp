@@ -2,19 +2,12 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
-/**
- * Where the Lua engine lives and how to reach its modules.
- *
- * A PathOfBuilding git checkout and an installed PoB.app hold the same engine in
- * different shapes, so the search paths cannot be derived from one hardcoded layout.
- */
+/** Where the Lua engine lives and how to reach its modules. */
 export interface PoBLayout {
   kind: "checkout" | "macos-app";
-  /** Directory containing HeadlessWrapper.lua; the cwd for the Lua process. */
+  /** Directory holding HeadlessWrapper.lua; the cwd for the Lua process. */
   src: string;
-  /** package.path entries, in order. */
   luaPath: string[];
-  /** package.cpath entries, in order. */
   luaCPath: string[];
 }
 
@@ -27,7 +20,6 @@ const exists = (p: string): boolean => {
   }
 };
 
-/** Installed PoB.app locations, most likely first. */
 function appBundleCandidates(): string[] {
   const home = os.homedir();
   return [
@@ -38,15 +30,12 @@ function appBundleCandidates(): string[] {
   ];
 }
 
-/** A bundle counts only if it carries the pure-Lua modules the engine needs. */
+/** A bundle only counts if it carries the pure-Lua modules. */
 function findAppBundle(): string | null {
   return appBundleCandidates().find((b) => exists(path.join(b, "Contents", "Resources", "lua"))) ?? null;
 }
 
-/**
- * The launcher relocates a writable copy of src/ here and its updater keeps that copy
- * current, so it is preferred over the read-only copy inside the bundle.
- */
+/** The launcher's updater keeps the Application Support copy current, so prefer it. */
 function macAppSrcCandidates(bundle: string): string[] {
   return [
     path.join(os.homedir(), "Library", "Application Support", "PathOfBuildingMac", "src"),
@@ -54,9 +43,11 @@ function macAppSrcCandidates(bundle: string): string[] {
   ];
 }
 
+const stripSrc = (p: string): string =>
+  p.endsWith(`${path.sep}src`) || p.endsWith("/src") ? p.slice(0, -4) : p;
+
 function checkoutLayout(src: string): PoBLayout {
-  // A checkout keeps runtime/ beside src/
-  const base = src.endsWith(`${path.sep}src`) || src.endsWith("/src") ? src.slice(0, -4) : src;
+  const base = stripSrc(src);
   const runtime = path.join(base, "runtime");
   const runtimeLua = path.join(runtime, "lua");
   const luaRocks = path.join(os.homedir(), ".luarocks", "lib", "lua", "5.1");
@@ -66,45 +57,37 @@ function checkoutLayout(src: string): PoBLayout {
     kind: "checkout",
     src,
     luaPath: [path.join(runtimeLua, "?.lua"), path.join(runtimeLua, "?", "init.lua")],
-    // runtime/ first so a checkout's own modules win, then luarocks for the
-    // platforms PoB ships no build for.
+    // runtime/ first so a checkout's own modules win over luarocks
     luaCPath: [path.join(runtime, `?.${ext}`), path.join(luaRocks, `?.${ext}`)],
   };
 }
 
 function macAppLayout(bundle: string, src: string): PoBLayout {
-  const resources = path.join(bundle, "Contents", "Resources");
+  const lua = path.join(bundle, "Contents", "Resources", "lua");
   const macos = path.join(bundle, "Contents", "MacOS");
 
   return {
     kind: "macos-app",
     src,
-    // sha1 is a directory module, so the ?/init.lua entry is required
-    luaPath: [path.join(resources, "lua", "?.lua"), path.join(resources, "lua", "?", "init.lua")],
-    // The bundle ships its C modules as .dylib rather than .so
+    // sha1 is a directory module, hence the ?/init.lua entry
+    luaPath: [path.join(lua, "?.lua"), path.join(lua, "?", "init.lua")],
+    // the bundle ships .dylib rather than .so
     luaCPath: [path.join(macos, "?.dylib")],
   };
 }
 
 /**
- * Resolve the engine layout.
- *
- * An explicit src wins, and is treated as a checkout unless it has no sibling
- * runtime/ and an installed PoB.app is present. With no explicit src, an installed
- * app is preferred over the legacy checkout default, since it needs no setup and
- * always matches the PoB the user actually runs.
+ * An explicit src wins, treated as a checkout unless it has no sibling runtime/ and an
+ * app is installed. Otherwise prefer an installed app: no setup, and always the same
+ * PoB the user runs.
  */
 export function resolvePoBLayout(explicitSrc?: string): PoBLayout {
   const bundle = process.platform === "darwin" ? findAppBundle() : null;
 
   if (explicitSrc) {
-    const base = explicitSrc.endsWith(`${path.sep}src`) || explicitSrc.endsWith("/src")
-      ? explicitSrc.slice(0, -4)
-      : explicitSrc;
-    if (!exists(path.join(base, "runtime")) && bundle) {
-      return macAppLayout(bundle, explicitSrc);
-    }
-    return checkoutLayout(explicitSrc);
+    return !exists(path.join(stripSrc(explicitSrc), "runtime")) && bundle
+      ? macAppLayout(bundle, explicitSrc)
+      : checkoutLayout(explicitSrc);
   }
 
   if (bundle) {
@@ -115,16 +98,15 @@ export function resolvePoBLayout(explicitSrc?: string): PoBLayout {
   return checkoutLayout(path.join(os.homedir(), "Projects", "PathOfBuilding", "src"));
 }
 
-/** Default builds directory, matching where the installed PoB actually writes. */
+/** Where the installed PoB actually writes builds. */
 export function defaultBuildsDirectory(): string {
   const home = os.homedir();
-  if (process.platform === "darwin") {
-    // The current macOS port writes here; the older Qt port used ~/Path of Building
-    const appSupport = path.join(home, "Library", "Application Support", "Path of Building", "Builds");
-    const legacy = path.join(home, "Path of Building", "Builds");
-    if (exists(appSupport)) return appSupport;
-    if (exists(legacy)) return legacy;
-    return appSupport;
+  if (process.platform !== "darwin") {
+    return path.join(home, "Documents", "Path of Building", "Builds");
   }
-  return path.join(home, "Documents", "Path of Building", "Builds");
+  // current port uses Application Support; the older Qt port used ~/Path of Building
+  const appSupport = path.join(home, "Library", "Application Support", "Path of Building", "Builds");
+  const legacy = path.join(home, "Path of Building", "Builds");
+  if (exists(appSupport)) return appSupport;
+  return exists(legacy) ? legacy : appSupport;
 }
