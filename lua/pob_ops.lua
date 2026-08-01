@@ -192,6 +192,59 @@ function M.update_tree_delta(params)
 end
 
 
+-- PoB's calculation output is a live object graph: actors link back to their
+-- parents and to shared ModStores, so it contains reference cycles. Handing it
+-- straight to json.encode raises "reference cycle", which is an uncaught error
+-- that takes the whole bridge process down. Copy out a JSON-safe projection:
+-- scalars only, cycles broken, depth bounded.
+local SANITIZE_MAX_DEPTH = 4
+local function sanitizeForJson(value, depth, seen)
+  local t = type(value)
+  if t == 'string' or t == 'boolean' then return value end
+  if t == 'number' then
+    -- dkjson also refuses NaN and +/-inf.
+    if value ~= value or value == math.huge or value == -math.huge then return nil end
+    return value
+  end
+  if t ~= 'table' then return nil end
+  if depth >= SANITIZE_MAX_DEPTH then return nil end
+  if seen[value] then return nil end
+  seen[value] = true
+  local out = nil
+  for k, v in pairs(value) do
+    local kt = type(k)
+    if kt == 'string' or kt == 'number' then
+      local clean = sanitizeForJson(v, depth + 1, seen)
+      if clean ~= nil then
+        out = out or {}
+        out[k] = clean
+      end
+    end
+  end
+  seen[value] = nil
+  return out
+end
+
+function M.sanitize_for_json(value)
+  return sanitizeForJson(value, 0, {})
+end
+
+-- A node this build could actually take: on the passive tree proper, or in the
+-- build's own ascendancy. Mastery nodes are excluded because allocating one
+-- without an effect selection is a no-op (see PassiveSpec:ImportFromNodeList).
+function M.is_allocatable(node)
+  if type(node) ~= 'table' then return false end
+  if node.type == 'Mastery' or node.isMastery then return false end
+  if node.type == 'ClassStart' or node.classStartIndex then return false end
+  if node.isProxy then return false end
+  local asc = node.ascendancyName
+  if asc and asc ~= '' then
+    local own = build and build.spec and build.spec.curAscendClassName
+    if not own or own == '' or asc ~= own then return false end
+  end
+  return true
+end
+
 -- params: { addNodes?: number[], removeNodes?: number[], masteryEffects?: {[nodeId]: effectId}, useFullDPS?: boolean }
 function M.calc_with(params)
   if not build or not build.calcsTab then return nil, 'build not initialized' end
@@ -228,7 +281,7 @@ function M.calc_with(params)
   if origMastery then
     build.spec.masterySelections = origMastery
   end
-  return out, baseOut
+  return M.sanitize_for_json(out), M.sanitize_for_json(baseOut)
 end
 
 
