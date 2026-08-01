@@ -435,6 +435,11 @@ export function getLuaToolSchemas(): any[] {
             items: { type: "string" },
             description: "Node IDs to remove from the current allocation",
           },
+          mastery_effects: {
+            type: "object",
+            additionalProperties: { type: "number" },
+            description: "Effect to select for each Mastery node being added, as {\"<nodeId>\": <effectId>}. Required to allocate a Mastery: Path of Building refuses to allocate a Mastery node that has no effect chosen. Use suggest_masteries or search_tree_nodes to find effect IDs.",
+          },
         },
       },
     },

@@ -569,7 +569,7 @@ export async function handleLuaReloadBuild(context: LuaHandlerContext, buildName
   });
 }
 
-export async function handleUpdateTreeDelta(context: LuaHandlerContext, addNodes?: string[], removeNodes?: string[]) {
+export async function handleUpdateTreeDelta(context: LuaHandlerContext, addNodes?: string[], removeNodes?: string[], masteryEffects?: Record<string, number>) {
   return wrapHandler('update tree delta', async () => {
     await context.ensureLuaClient();
     const luaClient = context.getLuaClient();
@@ -579,9 +579,10 @@ export async function handleUpdateTreeDelta(context: LuaHandlerContext, addNodes
       throw new Error('At least one of add_nodes or remove_nodes must be provided.');
     }
 
-    const params: { addNodes?: number[]; removeNodes?: number[] } = {};
+    const params: { addNodes?: number[]; removeNodes?: number[]; masteryEffects?: Record<string, number> } = {};
     if (addNodes?.length)    params.addNodes    = addNodes.map(Number);
     if (removeNodes?.length) params.removeNodes = removeNodes.map(Number);
+    if (masteryEffects && Object.keys(masteryEffects).length) params.masteryEffects = masteryEffects;
 
     const result = await luaClient.updateTreeDelta(params);
     const tree = result?.tree;
@@ -605,8 +606,14 @@ export async function handleUpdateTreeDelta(context: LuaHandlerContext, addNodes
       text += `\n🔴 BLOCKED: ${skippedAsc.length} ascendancy node(s) skipped — would exceed 8-point ascendancy cap (IDs: ${skippedAsc.join(', ')}).`;
     }
 
-    if (addedCount > 0 && !autoPathedNodes?.length && !skippedAsc?.length) {
-      text += `\n⚠️  If total count is lower than expected, some nodes may have been dropped (not connected or invalid IDs).`;
+    // PoB reports exactly which requested nodes it refused, so name them
+    // instead of hedging about the total looking wrong.
+    const dropped: number[] = result?.droppedNodes ?? [];
+    if (dropped.length > 0) {
+      text += `\n\n⚠️  ${dropped.length} requested node(s) were NOT allocated: ${dropped.join(', ')}.`;
+      text += `\n   A node is dropped when it is not connected to your tree, when the ID is invalid,`;
+      text += `\n   or when it is a Mastery node with no effect chosen — pass mastery_effects`;
+      text += `\n   ({"<nodeId>": <effectId>}) to allocate a Mastery.`;
     }
 
     const ascUsed = tree?.ascendancyPointsUsed ?? 0;
