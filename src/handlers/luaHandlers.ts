@@ -476,6 +476,9 @@ export async function handleLuaSetTree(context: LuaHandlerContext, args: any) {
       treeVersion = treeVersion ?? currentTree?.treeVersion;
     }
 
+    // The Lua side (M.import_from_node_list) merges the build's existing
+    // mastery selections underneath whatever we pass here, so an omitted
+    // masteryEffects still preserves masteries already on the build.
     const tree = await luaClient.setTree({
       classId,
       ascendClassId,
