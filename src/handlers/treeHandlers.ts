@@ -389,7 +389,10 @@ export async function handleGetPassiveUpgrades(
     const ascendancy = node.ascendancy ?? node.ascendancyName ?? '';
     const isForeignAscendancy = ascendancy !== '' && ascendancy !== ownAscendancy;
     const isMastery = node.isMastery === true || node.type === 'Mastery';
-    return !isForeignAscendancy && !isMastery;
+    // Blight notables sit off the tree entirely and are reached by anointing an
+    // amulet, never by spending a passive point. find_best_anointment covers them.
+    const isAnointOnly = node.isBlighted === true;
+    return !isForeignAscendancy && !isMastery && !isAnointOnly;
   };
 
   // One failed keyword should narrow the search, not sink the whole suggestion.

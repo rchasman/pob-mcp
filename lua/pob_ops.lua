@@ -1145,6 +1145,9 @@ function M.search_nodes(params)
         orbit = node.orbit,
         orbitIndex = node.orbitIndex,
         ascendancyName = node.ascendancyName,
+        -- Blight notables sit off the tree and are reached by anointing, not by
+        -- spending a point; callers need to tell them apart from real nodes.
+        isBlighted = node.isBlighted == true,
       })
       count = count + 1
     end
