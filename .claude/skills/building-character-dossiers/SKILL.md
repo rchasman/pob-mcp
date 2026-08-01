@@ -12,6 +12,18 @@ A dossier is a single self-contained HTML file that shows a character's state an
 
 **Core principle: generate from the build file, never transcribe.** Anything typed by hand goes stale the moment the player saves, and stale numbers are worse than no numbers.
 
+**A dossier is not a second copy of Path of Building.** The player already has
+PoB open. Every panel has to answer one of three questions: what is this
+character, what is it going for, what does it do next. A panel that only
+restates what PoB shows on its own screens is worse than nothing, because it
+buries the answers in furniture.
+
+The test: name the decision a panel supports. A gem grid listing nine socket
+groups supports none, and the player will tell you it does not render properly
+and does not help. The *finding* inside it does: "your selected socket group is
+a gem level behind the other copy, worth 25% DPS". Cut the grid, keep the
+finding, price it.
+
 **REQUIRED BACKGROUND:** Use the `analyzing-pob-builds` skill for the analysis itself. This skill only covers turning findings into a document.
 
 ## Before Writing Anything
@@ -94,6 +106,26 @@ rewrites the inlined PNGs in a generated stylesheet.
 **The artwork is not redistributable.** It is Grinding Gear Games'. Local pages
 are fine; anything you publish should use the artwork-free stylesheet.
 
+### Typeface
+
+Path of Exile sets item text in **Fontin** (Jos Buivenga, exljbris), and nothing
+makes a tooltip read as fake faster than monospace. Read the licence rather than
+guessing at it:
+
+- "This font is free for personal and commercial use", commercial is already
+  granted, so *non-commercial does not unlock anything extra*.
+- "This font may not be distributed or sold", redistribution is barred on its
+  own axis, independent of money.
+- "You may use this font for Font-Face embedding, but only if you put a link to
+  www.exljbris.nl on your page and/or put this notice
+  `/* A font by Jos Buivenga (exljbris) -> www.exljbris.com */`"
+
+So a dossier may embed it; a package may not ship it. Download the TTF bundle
+from exljbris, inline Regular, Italic, Bold and SmallCaps as `@font-face` with
+that credit comment, and point `--poe-font` and `--poe-font-head` at them.
+Roughly 160 KB for four faces. Set names to weight 400: Fontin SmallCaps ships
+one weight, and asking for 600 gets a synthesised bold.
+
 ## Prices
 
 poe.ninja gives live costs, which turns "that oil is expensive" into a decision.
@@ -144,6 +176,8 @@ Edit surgically; do not regenerate prose that is still true.
 | Ranking anoints by raw DPS | Recommends a 218c oil | Rank by value per chaos |
 | Undated prices | Silently wrong later | Stamp league and date |
 | `&mdash;` in markup | Renders an em dash | Check entities, not just literals |
+| Panels that mirror PoB | Buries the answers | Keep the finding, cut the grid |
+| Monospace item text | Reads as obviously fake | Embed Fontin with its credit |
 
 ## Verify Before Deploying
 
