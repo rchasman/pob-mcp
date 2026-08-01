@@ -339,7 +339,10 @@ function M.calc_with(params)
     override.addNodes = {}
     for _, id in ipairs(params.addNodes) do
       local n = build.spec and build.spec.nodes and build.spec.nodes[tonumber(id)]
-      if n then override.addNodes[n] = true end
+      -- spec.nodes holds every node on the tree, including other classes'
+      -- ascendancies. Simulating one of those is not a meaningful "what if"
+      -- and can take the calculator down, so only consider allocatable nodes.
+      if n and M.is_allocatable(n) then override.addNodes[n] = true end
     end
   end
   if params and type(params.removeNodes) == 'table' then
@@ -1149,6 +1152,9 @@ function M.search_nodes(params)
         orbit = node.orbit,
         orbitIndex = node.orbitIndex,
         ascendancyName = node.ascendancyName,
+        -- Blight notables sit off the tree and are reached by anointing, not by
+        -- spending a point; callers need to tell them apart from real nodes.
+        isBlighted = node.isBlighted == true,
       })
       count = count + 1
     end
