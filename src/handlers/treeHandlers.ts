@@ -384,6 +384,18 @@ export async function handleGetPassiveUpgrades(
   const seen = new Set<string>();
   const candidates: any[] = [];
 
+  // search_nodes matches across the whole tree, which includes every other
+  // class's ascendancy. Those can never be allocated by this build, and
+  // simulating them takes the calculator down, so drop them before scoring.
+  const ownAscendancy = (await luaClient.getBuildInfo())?.ascendClassName ?? '';
+  const isSimulatable = (node: any): boolean => {
+    const asc = node.ascendancy ?? node.ascendancyName ?? '';
+    if (asc && asc !== ownAscendancy) return false;
+    if (node.isMastery || node.type === 'Mastery') return false;
+    return true;
+  };
+
+  let skippedForeign = 0;
   for (const keyword of keywords.slice(0, 4)) {
     try {
       const results = await luaClient.searchNodes({
@@ -395,10 +407,10 @@ export async function handleGetPassiveUpgrades(
       if (results && results.nodes) {
         for (const node of results.nodes) {
           const id = String(node.id);
-          if (!seen.has(id)) {
-            seen.add(id);
-            candidates.push(node);
-          }
+          if (seen.has(id)) continue;
+          seen.add(id);
+          if (!isSimulatable(node)) { skippedForeign++; continue; }
+          candidates.push(node);
         }
       }
     } catch { /* skip failed searches */ }
@@ -460,6 +472,9 @@ export async function handleGetPassiveUpgrades(
     '',
     `Base DPS: ${Math.round(baseDPS).toLocaleString()}  |  Base EHP: ${Math.round(baseEHP).toLocaleString()}`,
     `Evaluated ${candidates.length} candidate notables, showing top ${top.length}:`,
+    ...(skippedForeign > 0
+      ? [`(skipped ${skippedForeign} node(s) this build cannot allocate)`]
+      : []),
     '',
   ];
 

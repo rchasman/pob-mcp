@@ -332,7 +332,10 @@ function M.calc_with(params)
     override.addNodes = {}
     for _, id in ipairs(params.addNodes) do
       local n = build.spec and build.spec.nodes and build.spec.nodes[tonumber(id)]
-      if n then override.addNodes[n] = true end
+      -- spec.nodes holds every node on the tree, including other classes'
+      -- ascendancies. Simulating one of those is not a meaningful "what if"
+      -- and can take the calculator down, so only consider allocatable nodes.
+      if n and M.is_allocatable(n) then override.addNodes[n] = true end
     end
   end
   if params and type(params.removeNodes) == 'table' then
