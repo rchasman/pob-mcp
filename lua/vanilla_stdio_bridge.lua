@@ -195,9 +195,16 @@ handlers.update_tree_delta = function(params)
 end
 
 handlers.set_config = function(params)
-  local ok2, err = BuildOps.set_config(params or {})
-  if not ok2 then return { ok = false, error = err } end
-  return { ok = true, config = (BuildOps.get_config()) }
+  local result, err = BuildOps.set_config(params or {})
+  if not result then return { ok = false, error = err } end
+  -- Report per-key outcomes so the caller can tell an applied change from a
+  -- rejected one instead of assuming success.
+  return {
+    ok = true,
+    applied = result.applied,
+    rejected = result.rejected,
+    config = (BuildOps.get_config()),
+  }
 end
 
 handlers.set_main_selection = function(params)
@@ -224,7 +231,11 @@ handlers.get_tree = op(BuildOps.get_tree, 'tree')
 handlers.get_items = op(BuildOps.get_items, 'items')
 handlers.get_skills = op(BuildOps.get_skills, 'skills')
 handlers.get_build_info = op(BuildOps.get_build_info, 'info')
-handlers.get_config = op(BuildOps.get_config, 'config')
+handlers.get_config = function()
+  local cfg, err = BuildOps.get_config()
+  if cfg == nil then return { ok = false, error = err or 'operation failed' } end
+  return { ok = true, config = cfg, labels = (BuildOps.get_config_labels()) }
+end
 handlers.calc_with = op(BuildOps.calc_with, 'output')
 handlers.export_build_xml = op(BuildOps.export_build_xml, 'xml')
 handlers.add_item_text = op(BuildOps.add_item_text, 'item')

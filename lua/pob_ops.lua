@@ -2,6 +2,60 @@
 
 local M = {}
 
+-- PoB's own config option table is the only authoritative list of valid config
+-- vars and their types. Deriving from it means new upstream options work here
+-- without a code change; a hand-maintained allowlist silently drifts instead.
+local configVarIndex
+local function getConfigVarIndex()
+  if configVarIndex then return configVarIndex end
+  local ok, varList = pcall(LoadModule, "Modules/ConfigOptions")
+  if not ok or type(varList) ~= 'table' then return nil end
+  configVarIndex = {}
+  for _, varData in ipairs(varList) do
+    if varData.var then
+      configVarIndex[varData.var] = varData
+    end
+  end
+  return configVarIndex
+end
+
+-- Coerce an incoming JSON value to what PoB's control for this var would store.
+-- Returns value, err.
+local function coerceConfigValue(varData, value)
+  local t = varData.type
+  if t == 'check' then
+    if type(value) == 'boolean' then return value end
+    if value == 'true' or value == 1 then return true end
+    if value == 'false' or value == 0 then return false end
+    return nil, 'expected boolean'
+  elseif t == 'count' or t == 'countAllowZero' or t == 'integer' or t == 'float' then
+    local n = tonumber(value)
+    if not n then return nil, 'expected number' end
+    return n
+  elseif t == 'list' then
+    -- Accept either the stored val or the human-facing label.
+    for _, entry in ipairs(varData.list or {}) do
+      if entry.val == value or tostring(entry.val) == tostring(value) then return entry.val end
+      if entry.label and tostring(entry.label):lower() == tostring(value):lower() then return entry.val end
+    end
+    return nil, 'not a valid option for this list'
+  end
+  -- Unknown control type: store as-is rather than refusing.
+  return value
+end
+
+-- Human-facing label for a stored config value, so callers see "Kill all"
+-- rather than the raw "None" that PoB stores for the bandit quest.
+function M.config_value_label(var, value)
+  local index = getConfigVarIndex()
+  local varData = index and index[var]
+  if not varData or varData.type ~= 'list' then return nil end
+  for _, entry in ipairs(varData.list or {}) do
+    if entry.val == value or tostring(entry.val) == tostring(value) then return entry.label end
+  end
+  return nil
+end
+
 -- Upstream's PassiveSpec:ImportFromNodeList gained a leading className
 -- parameter (9 params incl. self, up from 8). Detect which signature the
 -- loaded checkout has so both old and current PoB versions work.
@@ -306,33 +360,58 @@ function M.get_config()
   return cfg
 end
 
+-- Dropdown options store a val that often differs from what the UI shows: the
+-- bandit quest stores "None" but reads "Kill all". Expose the labels so callers
+-- can display what PoB displays instead of the raw stored value.
+function M.get_config_labels()
+  local cfg, err = M.get_config()
+  if not cfg then return nil, err end
+  local labels = {}
+  for k, v in pairs(cfg) do
+    local label = M.config_value_label(k, v)
+    if label then labels[k] = label end
+  end
+  return labels
+end
+
 function M.set_config(params)
   if not build or not build.configTab then return nil, 'build/config not initialized' end
   if type(params) ~= 'table' then return nil, 'invalid params' end
   local input = build.configTab.input or {}
   build.configTab.input = input
+  local index = getConfigVarIndex()
+  if not index then return nil, 'could not load PoB config options' end
+
+  local applied, rejected = {}, {}
   local changed = false
-  if params.bandit ~= nil then input.bandit = tostring(params.bandit); changed = true end
-  if params.pantheonMajorGod ~= nil then input.pantheonMajorGod = tostring(params.pantheonMajorGod); changed = true end
-  if params.pantheonMinorGod ~= nil then input.pantheonMinorGod = tostring(params.pantheonMinorGod); changed = true end
-  if params.enemyLevel ~= nil then build.configTab.enemyLevel = tonumber(params.enemyLevel) or build.configTab.enemyLevel; changed = true end
-  if params.enemyFireResist ~= nil then input.enemyFireResistance = tonumber(params.enemyFireResist); changed = true end
-  if params.enemyColdResist ~= nil then input.enemyColdResistance = tonumber(params.enemyColdResist); changed = true end
-  if params.enemyLightningResist ~= nil then input.enemyLightningResistance = tonumber(params.enemyLightningResist); changed = true end
-  if params.enemyChaosResist ~= nil then input.enemyChaosResistance = tonumber(params.enemyChaosResist); changed = true end
-  if params.enemyArmour ~= nil then input.enemyArmour = tonumber(params.enemyArmour); changed = true end
-  if params.enemyEvasion ~= nil then input.enemyEvasion = tonumber(params.enemyEvasion); changed = true end
-  if params.usePowerCharges ~= nil then input.usePowerCharges = params.usePowerCharges; changed = true end
-  if params.useFrenzyCharges ~= nil then input.useFrenzyCharges = params.useFrenzyCharges; changed = true end
-  if params.useEnduranceCharges ~= nil then input.useEnduranceCharges = params.useEnduranceCharges; changed = true end
-  if params.conditionShockedGround ~= nil then input.conditionShockedGround = params.conditionShockedGround; changed = true end
-  if params.conditionFortify ~= nil then input.conditionFortify = params.conditionFortify; changed = true end
-  if params.conditionLeeching ~= nil then input.conditionLeeching = params.conditionLeeching; changed = true end
-  if params.buffOnslaught ~= nil then input.buffOnslaught = params.buffOnslaught; changed = true end
-  if params.enemyIsBoss ~= nil then input.enemyIsBoss = tostring(params.enemyIsBoss); changed = true end
+  for key, value in pairs(params) do
+    -- enemyLevel lives on the tab itself, not in the input table.
+    if key == 'enemyLevel' then
+      local n = tonumber(value)
+      if n then
+        build.configTab.enemyLevel = n
+        applied[key] = n
+        changed = true
+      else
+        rejected[key] = 'expected number'
+      end
+    elseif index[key] then
+      local coerced, err = coerceConfigValue(index[key], value)
+      if err then
+        rejected[key] = err
+      else
+        input[key] = coerced
+        applied[key] = coerced
+        changed = true
+      end
+    else
+      rejected[key] = 'unknown config option'
+    end
+  end
+
   if changed and build.configTab.BuildModList then build.configTab:BuildModList() end
   M.get_main_output()
-  return true
+  return { applied = applied, rejected = rejected }
 end
 
 

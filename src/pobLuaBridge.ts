@@ -420,10 +420,25 @@ async setTree(params: {
     return res.config;
   }
 
-  async setConfig(params: Record<string, any>): Promise<any> {
+  /** Human-facing labels for dropdown config values (bandit "None" -> "Kill all"). */
+  async getConfigLabels(): Promise<Record<string, string>> {
+    const res = await this.send({ action: "get_config" });
+    if (!res.ok) throw new Error(res.error || "get_config failed");
+    return (res.labels as Record<string, string>) ?? {};
+  }
+
+  async setConfig(params: Record<string, any>): Promise<{
+    applied: Record<string, any>;
+    rejected: Record<string, string>;
+    config: Record<string, any>;
+  }> {
     const res = await this.send({ action: "set_config", params });
     if (!res.ok) throw new Error(res.error || "set_config failed");
-    return res.config;
+    return {
+      applied: (res.applied as Record<string, any>) ?? {},
+      rejected: (res.rejected as Record<string, string>) ?? {},
+      config: (res.config as Record<string, any>) ?? {},
+    };
   }
 
   async createSocketGroup(params?: { label?: string; slot?: string; enabled?: boolean; includeInFullDPS?: boolean }): Promise<any> {
