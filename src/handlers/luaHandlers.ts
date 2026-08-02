@@ -557,7 +557,7 @@ export async function handleLuaReloadBuild(context: LuaHandlerContext, buildName
       targetName = String(info.name);
     }
 
-    const fileName = targetName.endsWith('.xml') ? targetName : `${targetName}.xml`;
+    const fileName = buildFileName(targetName);
     const buildPath = resolveBuildFile(fileName, context.pobDirectory);
     const xml = await fs.readFile(buildPath, 'utf-8');
     const name = fileName.replace(/\.xml$/i, '');
