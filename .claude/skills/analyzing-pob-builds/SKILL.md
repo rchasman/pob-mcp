@@ -101,6 +101,37 @@ Treat upgrade-scan output as *value of the node*, never *value per point*.
 
 Match masteries by **effect ID, not node ID**. The same effect is offered on several nodes, so checking one node ID reports a taken effect as missing.
 
+## Ailments Are Credited At Zero Until You Configure Them
+
+PoB applies a non-damaging ailment to the enemy only when the source is
+**guaranteed** or when you have typed its magnitude into the matching
+`Effect of X` config. A chance-to-shock skill satisfies neither, so the enemy
+is flagged as shocked, every "against shocked enemies" modifier fires, and the
+shock itself multiplies damage by **nothing**.
+
+The gap is invisible from the outside. `output.CurrentShock` reads 0, raising
+shock effect or the shock cap moves no number, and the DPS figure looks
+settled.
+
+```
+lua_get_ailments   -> appliedEffect vs calculatedEffect
+```
+
+`appliedEffect` is what the calculation credits; `calculatedEffect` is what the
+skill would inflict on the configured enemy. When they disagree, set
+`conditionShockEffect` (or the chill/scorch/sap/brittle equivalent) before
+ranking anything, because every downstream comparison is scaled by it.
+
+Measured example: a shock build read 125,029 DPS with the effect unset. Its
+real shock was **6% against the configured Pinnacle boss** (ailment threshold
+6,349,995) and reached the 50% cap only at a threshold of **39,743 or below**.
+Same build, same gear, an eightfold spread in what the shock is worth.
+
+Ailment magnitude scales with `(damage / enemyThreshold) ^ 0.4`, so it collapses
+against anything with real life. **One figure never covers both bosses and
+trash.** Quote the value at the threshold you are actually ranking against, and
+read the whole table before saying an ailment build "caps".
+
 ## Common Mistakes
 
 | Mistake | Consequence | Fix |
@@ -115,6 +146,8 @@ Match masteries by **effect ID, not node ID**. The same effect is offered on sev
 | Ignoring keystone lockouts | Values dead mods | Read allocated keystones first |
 | Treating a config default as a user choice | Wrong inference | Check `ConfigOptions.lua` |
 | Reading tree data from a different PoB install | Silently wrong data | Resolve the runtime `src` path |
+| Reading DPS on a shock or chill build | Ailment credited at 0, damage understated | `lua_get_ailments`, then set the effect config |
+| Quoting one ailment magnitude for all content | Bosses and maps differ by an order of magnitude | Read the threshold table |
 
 ## Red Flags, Stop And Verify
 
@@ -125,6 +158,7 @@ Match masteries by **effect ID, not node ID**. The same effect is offered on sev
 - Ranking defences on `TotalEHP`
 - Recommending a node without having found a path to it
 - Saying "you have no room" without having reconciled hybrids
+- A build invests in shock or chill and the ailment moves DPS by nothing when toggled
 
 **All of these mean: go back and check the underlying data before answering.**
 
