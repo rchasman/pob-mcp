@@ -44,6 +44,40 @@ If the field did not move, the mutation failed regardless of what the tool said.
 
 **Parameter names are not guessable.** `add_item` takes `slot_name` (not `slot`); `set_gem_level` takes `group_index`/`gem_index`; `set_config` takes `config_name`. Grep `src/server/toolSchemas.ts` when unsure, a wrong name can produce a cheerful success message and no effect.
 
+### Three mutations that lie in ways the snapshot will not catch
+
+**`customMods` cannot be read or written through the config API.** It is a multi-line
+`<Input string="...">` and both `get_config` and `set_config` drop it silently: every
+value you write produces the identical DPS, and the getter returns nothing. Read the
+true value straight out of the XML:
+
+```
+XML.match(/<Input string="([^"]*)"\s+name="customMods"\s*\/>/)
+```
+
+Apply payload modifiers through a **carrier item** instead: append the lines to an
+equipped item's raw text and re-add it. Always measure the *unmodified* carrier first
+and assert it reproduces the baseline exactly, or you are measuring the carrier.
+
+**`remove_gem` renumbers everything after it.** A `remove(3)` then `remove(6)` pair
+removes the wrong second gem, and the DPS still moves, so the result looks plausible.
+Look gems up by name each time and read the socket group back afterwards:
+
+```
+idx = gems.findIndex(g => g.name === "Innervate") + 1
+...mutate...
+assert readback contains the gem you expected and not the one you did not
+```
+
+Order matters too: level-and-quality passes that address gems by index must run
+*before* any swap, or they will level the gem you just inserted. A level 20 Empower
+is the tell.
+
+**Animate Guardian gear lives in a second `ItemSet` that is never applied.** PoB
+stores it as `<ItemSet id="2" title="Animated Guardian">` while `<Items activeItemSet="1">`.
+Nothing from it reaches any figure, on your build or on an imported one. Anyone
+comparing DPS against a top build is comparing two numbers that both exclude it.
+
 ## Item Analysis Recipe
 
 Do these in order. Skipping a step produces advice the user cannot act on.
@@ -74,6 +108,22 @@ You cannot recraft a prefix into a resistance. Check the slot type of the mod be
 **4. Gate by item level.** Read `Item Level` off the item and filter `ModMaster.lua` to `level <= ilvl`. An ilvl 45 body armour cannot take the ilvl 50 resistance tier; an ilvl 23 ring is stuck two tiers down.
 
 **5. Check attribute requirements** after any swap: `Str`/`Dex`/`Int` against `ReqStr`/`ReqDex`/`ReqInt`. PoB reports full stats for a character whose gear would be disabled in game.
+
+**6. Price the affix before you price the item.** Search `ModExplicit.lua` for the stat
+you actually need and read its tier, `type`, `level` and `weightKey` slot list. One T1
+suffix routinely matches a several-hundred-chaos unique built around the same stat:
+`of Bameth` is +(31&ndash;35)% chaos resistance at ilvl 81 on rings, amulets, belts and
+armour. A recommendation that only ranks uniques has skipped the cheapest answer,
+and rares are the only items whose affixes the player chooses.
+
+Two corollaries worth stating in any write-up:
+
+- **A resistance stops paying the moment it is no longer the lowest number.** Sweep it
+  in steps and find where the binding constraint changes hands, then recommend
+  stopping there. Buying past that point reads as progress and measures as nothing.
+- **A one-hander swap is not a dual-wield swap.** Replacing the main hand keeps the
+  off-hand's resistances and gem levels; dropping the shield for a second weapon can
+  invert the sign. Measure them as separate options, because players conflate them.
 
 ## Ranking Defensive Options
 
@@ -132,6 +182,27 @@ against anything with real life. **One figure never covers both bosses and
 trash.** Quote the value at the threshold you are actually ranking against, and
 read the whole table before saying an ailment build "caps".
 
+### The value is a fixed point, and it moves with the gear
+
+That exponent makes the magnitude self-reinforcing: raising the hit raises the
+ailment, which raises the hit. Solve it rather than reading it once.
+
+```
+effect = 23
+loop:  set conditionShockEffect(effect)
+       hit = LightningHitAverage
+       next = round(50 * (hit/threshold)^0.4 * ShockEffectMod)
+       stop when next == effect
+```
+
+Two consequences for any roadmap you write. **Every damage upgrade raises the
+correct value**, so a figure typed in before the shopping list is stale by the end
+of it. And **any swap that drops ailment-effect gear lowers it**: trading boots
+carrying "increased Effect of Lightning Ailments" moved `ShockEffectMod` 2.97 to
+2.50 and the honest field 32 to 28, a 3% damage cut that is invisible because the
+field is hand-typed and does not follow the gear. Re-solve after each step, and
+say so in the deliverable.
+
 ## Common Mistakes
 
 | Mistake | Consequence | Fix |
@@ -148,6 +219,11 @@ read the whole table before saying an ailment build "caps".
 | Reading tree data from a different PoB install | Silently wrong data | Resolve the runtime `src` path |
 | Reading DPS on a shock or chill build | Ailment credited at 0, damage understated | `lua_get_ailments`, then set the effect config |
 | Quoting one ailment magnitude for all content | Bosses and maps differ by an order of magnitude | Read the threshold table |
+| Writing `customMods` through `set_config` | Silently ignored, every value reads the same | Read it from the XML, apply via a carrier item |
+| Chained `remove_gem` calls by index | Removes the wrong gem, plausibly | Look up by name, read the group back |
+| Comparing your DPS to an imported build's | Both exclude any second `ItemSet` | Say so, or model the guardian on both sides |
+| Ranking only uniques | Misses a T1 suffix that costs a fraction | Search `ModExplicit.lua` for the stat first |
+| Typing an ailment magnitude once | Stale after every upgrade | Solve the fixed point, re-solve per step |
 
 ## Red Flags, Stop And Verify
 
@@ -159,6 +235,9 @@ read the whole table before saying an ailment build "caps".
 - Recommending a node without having found a path to it
 - Saying "you have no room" without having reconciled hybrids
 - A build invests in shock or chill and the ailment moves DPS by nothing when toggled
+- The same script, run twice, returns a different baseline
+- A recommendation list contains no rare and no affix
+- A gem swap measured a gain you cannot explain from the gem alone
 
 **All of these mean: go back and check the underlying data before answering.**
 
