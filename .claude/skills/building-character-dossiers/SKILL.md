@@ -28,9 +28,32 @@ finding, price it.
 
 ## Before Writing Anything
 
-1. `lua_load_build`, then `lua_reload_build` if the player has touched PoB. Check the file mtime.
+1. `lua_load_build`, then `lua_reload_build` if the player has touched PoB. Check the file mtime. During an active session they will edit mid-analysis, so re-check the mtime before you publish and diff what moved.
 2. Pull authoritative stats. Max hits and attribute requirements need `get_build_stats` **after** a save; everything else comes from the live engine.
 3. Re-derive every figure you are about to print. A dossier that disagrees with PoB is worthless.
+
+### Anchor absolutes to the file, quote deltas as percentages
+
+The headless engine and the PoB window can disagree. Measured divergence on one
+character: **4,417,036 headless against 4,148,600 in the GUI**, a 6.5% gap traced to
+cast speed 10.6 against 10.35 and an average hit 3.9% larger. Neither number is
+corrupt; they are different evaluations.
+
+PoB writes its own display values into the build file at save time, and that is the
+number on the player's screen:
+
+```bash
+grep -o '<PlayerStat value="[0-9.]*" stat="CombinedDPS"/>' build.xml
+```
+
+So: take **absolutes from `<PlayerStat>`**, take **deltas from your own engine runs**,
+and never mix them inside one row. Percentages are consistent within a run and are the
+real deliverable; project sheet values by applying them to the file's own figure. State
+the divergence once in a methods note so the reader is not left reconciling two numbers.
+
+**A baseline that changes between runs is a stop signal.** Re-run the identical script
+before building anything on top of it. A page anchored to a number you cannot reproduce
+is worse than a page with no numbers.
 
 ## What Renders Offline
 
@@ -153,7 +176,25 @@ Build the page from these parts, in order:
 5. **Decisions**, each priced in points or currency
 6. **Checklist**, cheapest-first, with a separate already-handled list
 
-Label every claim with how it was obtained. A `Measured` badge on a simulated figure and a `Verdict` badge on a judgement call keeps the two from blurring.
+Label every claim with how it was obtained. A `Measured` badge on a simulated figure and a `Verdict` badge on a judgement call keeps the two from blurring. Add a `Computed` badge for anything resting on an assumption you supplied: a hand-set rage count or ailment magnitude is arithmetic, not observation, and the assumption belongs in the sentence next to it.
+
+### Lead with the constraint, not the inventory
+
+A page organised by slot is a catalogue. A page organised by *what is stopping this
+character* is an argument, and the player can act on it.
+
+Open by naming the binding number, show why it binds, then let the shopping list fall
+out of it. Order the list by cost, because in practice the cheap options are often the
+large ones, and a reader who stops after two items should have taken the two that
+mattered. Where a step changes what a later step is worth, say so in the step.
+
+Two habits that keep such a list honest:
+
+- **Include the negatives.** A measured "this looks like an upgrade and is not" is worth
+  as much as a recommendation, and it is the part a player cannot easily derive. Give it
+  the number that proves it.
+- **Include at least one rare or affix.** A list made only of uniques means the affix
+  search was skipped, not that no rare was better.
 
 ## Updating An Existing Dossier
 
@@ -178,6 +219,27 @@ Edit surgically; do not regenerate prose that is still true.
 | `&mdash;` in markup | Renders an em dash | Check entities, not just literals |
 | Panels that mirror PoB | Buries the answers | Keep the finding, cut the grid |
 | Monospace item text | Reads as obviously fake | Embed Fontin with its credit |
+| Mixing GUI and headless numbers in one row | Two irreconcilable figures | Absolutes from `<PlayerStat>`, deltas from your runs |
+| Narrating what earlier versions said | Reads as a changelog | Describe the build now and what to do next |
+| A page of only uniques | The affix answer was never searched | Price the affix before the item |
+
+## Writing So The Copy Lint Passes First Time
+
+Pages published to a gallery get linted (`bunx slopsift .`, which must exit 0). Four
+patterns account for nearly every finding, and all four are habits worth dropping
+regardless of where the page lands:
+
+- **Comma splices.** Two independent clauses joined by a bare comma. Subordinate one,
+  or use a full stop. This is by far the most common finding in analytical prose.
+- **Repeated corrective antithesis.** "X, not Y" reads well once and reads as a tic by
+  the third instance. State the contrast directly instead.
+- **Dramatic fragments.** "Then the expensive tier." Join it to the claim it introduces.
+- **Unsupported comparatives.** "Beats", "outperforms", "far better" without the two
+  numbers. Show the measurement or narrow the claim.
+
+Rewrite findings rather than deleting the sentence: a cut paragraph says less than a
+plain one, and the fix is usually the concrete number the filler was standing in for.
+Rerun after edits, including on updates to an existing page.
 
 ## Verify Before Deploying
 
