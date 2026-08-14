@@ -2,6 +2,7 @@
 // Usage: POB_PATH=/path/to/PathOfBuilding/src node tests/smoke/bridge.mjs
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import zlib from 'node:zlib';
 import { PoBLuaApiClient } from '../../build/pobLuaBridge.js';
 
 const cwd = process.env.POB_PATH || process.env.POB_FORK_PATH;
@@ -32,6 +33,15 @@ try {
   const skillSetup = await client.getSkills();
   if (!info?.className || !Array.isArray(tree?.nodes) || typeof stats.Life !== 'number' || !Array.isArray(items) || !Array.isArray(skillSetup?.groups)) {
     throw new Error('unexpected adapter response shape');
+  }
+  // Real PoB import/export codes are zlib-deflated then URL-safe base64 — exercise the
+  // decode against the same build XML rather than only the mocked unit tests.
+  const exampleXml = await readFile(resolve('example-build.xml'), 'utf8');
+  const importCode = zlib.deflateSync(exampleXml).toString('base64').replace(/\+/g, '-').replace(/\//g, '_');
+  await client.importCode(importCode, 'import-code-smoke');
+  const importedInfo = await client.getBuildInfo();
+  if (importedInfo?.className !== info.className || importedInfo?.ascendClassName !== info.ascendClassName) {
+    throw new Error(`import_code produced an unexpected build: ${JSON.stringify(importedInfo)}`);
   }
   const changed = await client.setTree({ ...tree, ascendClassId: 0, nodes: [] });
   // Upstream keeps the class start allocated even when given an empty node list.
