@@ -33,6 +33,8 @@ The pob MCP server has **silent failure modes**: tools report success for operat
 
 ## Verifying A Mutation
 
+**First ask whether you need one.** To find out what a change is worth, use `lua_simulate`: it swaps an item, flips a flask or allocates nodes for a single calculation and returns before, after and delta without touching the loaded build. Mutate only when the player wants the change kept. Everything below is the cost of mutating, and simulation avoids all of it.
+
 ```
 before = lua_get_build_snapshot()
 <mutate>
@@ -150,15 +152,22 @@ Two corollaries worth stating in any write-up:
 
 **`TotalEHP` is the wrong metric for resistance decisions.** It averages across damage types, so patching your strongest element scores about the same as patching your weakest.
 
-Rank by the **weakest elemental max hit** instead:
+`analyze_defenses` now ranks by binding constraint and prints the per-type max hits, so read that rather than deriving it. Measured on a level 99 Occultist, two options `TotalEHP` cannot tell apart:
 
-```
-min(FireMaximumHitTaken, ColdMaximumHitTaken, LightningMaximumHitTaken)
-```
+| option | TotalEHP | resisted floor |
+|---|---|---|
+| +20% Fire | 44504.051025416 | 30,236 → **31,297** |
+| +20% Lightning | 44504.051025416 | 30,236 → **30,236** |
 
-Measured example: `+28% Lightning Res` beat `+28% Cold Res` on TotalEHP (+293 vs +288) while moving the weak link by **zero**. Cold raised the floor 27%. TotalEHP ranked them backwards.
+Identical to nine decimals; only fire moves what actually kills the character.
 
-**Test combinations, not single changes.** Two individually-positive crafts can be jointly negative by creating a new floor. Sweep the combinations and rank on the weakest link.
+**Read the binding type before recommending any resistance.** If Physical binds, no resistance purchase changes the floor. On that same fixture Physical binds at 18,642 against 63,711 for the elements, so every resistance recommendation there is noise.
+
+**Capped types tie.** Max hit uses capped resistance, so three elements at 75% report the same number whatever their overcap. That is not a fetch bug, and overcap buys nothing against a hit.
+
+**`analyze_defenses(sweep_resistances: true)` finds where a resistance stops paying**, one real calculation per step. PoB's max hit is not a clean `1/(1-res)` curve, and a fitted model puts the crossover several resistance points off. On that fixture chaos 68→75 gains 11,083 and then flatlines at the cap.
+
+**Test combinations, not single changes.** Two individually-positive crafts can be jointly negative by creating a new floor. Use `lua_simulate` to measure the combination rather than adding the two numbers together.
 
 ## Before Recommending A Passive Node
 

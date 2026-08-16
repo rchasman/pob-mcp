@@ -30,7 +30,11 @@ finding, price it.
 
 1. `lua_load_build`, then `lua_reload_build` if the player has touched PoB. Check the file mtime. During an active session they will edit mid-analysis, so re-check the mtime before you publish and diff what moved.
 2. Pull authoritative stats. Max hits and attribute requirements need `get_build_stats` **after** a save; everything else comes from the live engine.
-3. Re-derive every figure you are about to print. A dossier that disagrees with PoB is worthless.
+3. `analyze_defenses` for the binding constraint. It prints the per-type max hits and names which one binds, which is the number the page opens with. Do not rank defences on `TotalEHP`: it averages across damage types and will rank two options identically when only one of them moves the floor.
+4. `classify_item_affixes` on any gear you intend to discuss. Hand-counting prefixes and suffixes miscounts hybrids, and one miscount inverts "one open suffix" into "nothing possible".
+5. Re-derive every figure you are about to print. A dossier that disagrees with PoB is worthless.
+
+**Measure upgrades with `lua_simulate`, not by equipping them.** It returns before, after and delta for a candidate item, flask or node without touching the build, so a dossier can no longer leave a probe item behind in the player's session. It also reports unmet attribute requirements, which matters here: PoB prints full stats for gear the character could not actually use, and a dossier that recommends unusable gear is worse than one that recommends nothing.
 
 ### Anchor absolutes to the file, quote deltas as percentages
 
@@ -194,7 +198,13 @@ Two habits that keep such a list honest:
   as much as a recommendation, and it is the part a player cannot easily derive. Give it
   the number that proves it.
 - **Include at least one rare or affix.** A list made only of uniques means the affix
-  search was skipped, not that no rare was better.
+  search was skipped, not that no rare was better. `find_affix_tiers` prices the stat
+  itself, and `list_craftable_mods` gates the bench options by the item's level, so
+  neither is a judgement call any more.
+- **Say when the constraint hands over.** `analyze_defenses(sweep_resistances: true)`
+  measures where a resistance stops paying. A recommendation to buy past that point
+  reads as progress and measures as nothing, and the sweep gives you the stopping
+  number to print.
 
 ## Updating An Existing Dossier
 
