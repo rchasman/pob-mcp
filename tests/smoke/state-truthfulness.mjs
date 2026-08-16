@@ -8,18 +8,11 @@ import { smokePoBSrc } from './pobSource.mjs';
 
 const cwd = smokePoBSrc();
 
-// A stock fork checkout ships runtime/ next to src/, and the bridge derives the
-// Lua search paths from cwd on that assumption. An installed PoB app keeps them
-// elsewhere, so allow both to be supplied explicitly.
-const env = { POB_API_STDIO: '0' };
-if (process.env.POB_LUA_PATH) env.LUA_PATH = process.env.POB_LUA_PATH;
-if (process.env.POB_LUA_CPATH) env.LUA_CPATH = process.env.POB_LUA_CPATH;
-
 const client = new PoBLuaApiClient({
   cwd,
   cmd: process.env.POB_CMD,
   args: [resolve('lua/vanilla_stdio_bridge.lua')],
-  env,
+  env: { POB_API_STDIO: '0' },
   timeoutMs: 60_000,
 });
 
