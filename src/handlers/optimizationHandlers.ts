@@ -3,7 +3,13 @@ import type { BuildService } from "../services/buildService.js";
 import type { TreeService } from "../services/treeService.js";
 import type { OptimizationConstraints } from "../types/optimization.js";
 import fs from "fs/promises";
-import { analyzeDefenses, formatDefensiveAnalysis } from "../defensiveAnalyzer.js";
+import {
+  DEFENSIVE_STAT_FIELDS,
+  analyzeDefenses,
+  formatDefensiveAnalysis,
+  formatResistanceSweep,
+} from "../defensiveAnalyzer.js";
+import { runResistanceSweep } from "../services/resistanceSweep.js";
 import { wrapHandler } from "../utils/errorHandling.js";
 import { resolveBuildFile } from "../utils/pathSanitizer.js";
 import { readNamedBuild } from "../utils/namedBuild.js";
@@ -18,7 +24,8 @@ export interface OptimizationHandlerContext {
 
 export async function handleAnalyzeDefenses(
   context: OptimizationHandlerContext,
-  buildName?: string
+  buildName?: string,
+  sweepResistances?: boolean
 ) {
   return wrapHandler('analyze defenses', async () => {
     if (!buildName) {
@@ -52,8 +59,9 @@ export async function handleAnalyzeDefenses(
       await luaClient.loadBuildXml(buildXml, buildName);
     }
 
-    // Get stats from PoB
-    const stats = await luaClient.getStats();
+    // Ask for the fields by name: the default set carries no *MaximumHitTaken,
+    // so the binding damage type is missing from a bare getStats().
+    const stats = await luaClient.getStats([...DEFENSIVE_STAT_FIELDS]);
 
     // Validate that we have meaningful stats (not empty/default state)
     const life = stats.Life || 0;
@@ -87,6 +95,25 @@ export async function handleAnalyzeDefenses(
 
     let text = `${contextHeader}\n\n`;
     text += formatDefensiveAnalysis(analysis);
+
+    const { binding, resistedBinding } = analysis.maxHits;
+    if (sweepResistances) {
+      if (!resistedBinding) {
+        text += '\n**Resistance Sweep:** skipped. PoB reported no resisted max hit to sweep against.\n';
+      } else {
+        const { summary, note } = await runResistanceSweep(luaClient, resistedBinding.type, { buildName });
+        if (summary) text += `\n${formatResistanceSweep(summary)}\n`;
+        // A resistance cannot touch the physical max hit, so say so rather than
+        // letting the sweep read as "this is what fixes the character".
+        if (summary && binding && binding.type === 'Physical') {
+          text += `\nPhysical still owns the overall floor at ${Math.round(binding.maxHit).toLocaleString()}. ` +
+            'This sweep ranks resistance purchases against each other, not against the thing that kills you first.\n';
+        }
+        // Carries the skip reason and any failed-restore warning.
+        if (note) text += `\n${note}\n`;
+        if (!summary && !note) text += '\nSweep produced no result.\n';
+      }
+    }
 
     return {
       content: [
