@@ -243,7 +243,14 @@ say so in the deliverable.
 
 ## Working Safely
 
-Mutations for testing go on a scratch build, never the user's file:
+Measure a candidate with `lua_simulate` before mutating anything. It runs one
+hypothetical (item swap, flask toggle, passives, masteries) through the calculator
+and reports the delta without touching the build, so there is nothing to undo and
+no scratch file to clean up. It also names an attribute requirement the swap would
+leave unmet, which every other read path will quote full DPS for regardless.
+
+Reach for a mutation only when the change is not one `lua_simulate` can express,
+and then it goes on a scratch build, never the user's file:
 
 ```
 lua_save_build("scratch") -> lua_load_build("scratch.xml") -> mutate -> measure
