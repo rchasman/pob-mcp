@@ -60,8 +60,8 @@ export interface ResolvedAffix {
   source: ModEntry["source"];
   /** Every tier whose ranges contain the rolled values, lowest level first. */
   tiers: Array<{ id: string; affix: string; level: number; statLines: string[]; source: ModEntry["source"] }>;
-  /** Lowest item level that can carry the matched tier. */
-  minItemLevel: number;
+  /** Lowest item level that can carry the matched tier, null when no tier matched. */
+  minItemLevel: number | null;
   /** True when only the wording matched, so the tier and its ilvl are unknown. */
   valuesOutOfRange: boolean;
   /** Other affixes that could equally claim these lines. */
@@ -167,7 +167,8 @@ function resolveAffix(chosen: Attempt, lines: string[], entries: ModEntry[], ind
     group: chosen.entry.group,
     source: chosen.entry.source,
     tiers: tiers.map((tier) => ({ id: tier.id, affix: tier.affix, level: tier.level, statLines: tier.statLines, source: tier.source })),
-    minItemLevel: tiers.length ? tiers[0].level : chosen.entry.level,
+    // A wording-only match sits in no tier, so any level we printed would be invented.
+    minItemLevel: strict ? tiers[0]?.level ?? chosen.entry.level : null,
     valuesOutOfRange: !strict,
     alternatives: otherReadings(chosen, lines, index, strict),
   };
