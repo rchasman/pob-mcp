@@ -1,12 +1,12 @@
 import { describe, it, expect } from '@jest/globals';
-import { parseModText } from '../../src/services/modDataStore.js';
+import { parseModFile } from '../../src/services/modDataStore.js';
 import { MOD_EXPLICIT_EXCERPT, MOD_MASTER_EXCERPT } from '../fixtures/modDataExcerpt.js';
 
-const explicit = parseModText(MOD_EXPLICIT_EXCERPT, 'explicit');
-const master = parseModText(MOD_MASTER_EXCERPT, 'master');
+const explicit = parseModFile(MOD_EXPLICIT_EXCERPT, 'explicit');
+const master = parseModFile(MOD_MASTER_EXCERPT, 'master');
 const byId = (id: string) => explicit.find((entry) => entry.id === id)!;
 
-describe('parseModText on ModExplicit', () => {
+describe('parseModFile on ModExplicit', () => {
   it('keeps every line of a hybrid on one affix', () => {
     const pixies = byId('LocalIncreasedEnergyShieldPercentAndStunRecovery1');
 
@@ -41,11 +41,11 @@ describe('parseModText on ModExplicit', () => {
   it('rejects an entry whose stat lines and statOrder disagree', () => {
     const doctored = MOD_EXPLICIT_EXCERPT.replace('statOrder = { 1585, 1928 }', 'statOrder = { 1585 }');
 
-    expect(() => parseModText(doctored, 'explicit')).toThrow(/2 stat lines but 1 statOrder/);
+    expect(() => parseModFile(doctored, 'explicit')).toThrow(/2 stat lines but 1 statOrder/);
   });
 });
 
-describe('parseModText on ModMaster', () => {
+describe('parseModFile on ModMaster', () => {
   it('does not mistake the leading modTags for stat lines', () => {
     const life = master[0];
 

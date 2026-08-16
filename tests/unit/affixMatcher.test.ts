@@ -1,11 +1,11 @@
 import { describe, it, expect } from '@jest/globals';
 import { resolveAffixes, statTemplate, statValues } from '../../src/services/affixMatcher.js';
-import { parseModText } from '../../src/services/modDataStore.js';
+import { parseModFile } from '../../src/services/modDataStore.js';
 import { MOD_EXPLICIT_EXCERPT, MOD_MASTER_EXCERPT } from '../fixtures/modDataExcerpt.js';
 
 const entries = [
-  ...parseModText(MOD_EXPLICIT_EXCERPT, 'explicit'),
-  ...parseModText(MOD_MASTER_EXCERPT, 'master'),
+  ...parseModFile(MOD_EXPLICIT_EXCERPT, 'explicit'),
+  ...parseModFile(MOD_MASTER_EXCERPT, 'master'),
 ];
 
 describe('statTemplate', () => {
