@@ -33,7 +33,7 @@ export async function handleClassifyItemAffixes(args: { mod_lines: string[] }) {
       return [
         `${affix.type} "${affix.affix}" (${affix.group})${affix.valuesOutOfRange ? " [wording matched, values outside every tier]" : ""}`,
         ...affix.lines.map((line) => `    ${line}`),
-        `    Minimum item level: ${affix.minItemLevel}`,
+        `    Minimum item level: ${affix.minItemLevel ?? "unknown, the values match no tier"}`,
         ...(affix.lines.length > 1 ? [`    Hybrid: these ${affix.lines.length} lines are ONE ${affix.type.toLowerCase()}, not ${affix.lines.length}.`] : []),
         ...tierList.map((tier) => `    tier: ${tier}`),
         ...(affix.alternatives.length ? [`    Ambiguous: these lines could also be ${affix.alternatives.join("; ")}`] : []),

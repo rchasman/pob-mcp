@@ -87,6 +87,12 @@ describe('resolveAffixes', () => {
     expect(result.affixes[0].valuesOutOfRange).toBe(true);
   });
 
+  it('invents no item level for a roll that sits in no tier', () => {
+    const result = resolveAffixes(['+99% to Chaos Resistance'], entries);
+
+    expect(result.affixes[0].minItemLevel).toBeNull();
+  });
+
   it('leaves lines no affix explains out of the counts', () => {
     const result = resolveAffixes(['Trigger a Socketed Spell when you Attack'], entries);
 
