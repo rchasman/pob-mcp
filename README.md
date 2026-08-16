@@ -369,6 +369,21 @@ With every optional integration enabled, the server registers **99 tools** acros
 | `find_best_anointment` | Rank anointable notables by live DPS/EHP impact (Amulet or anointable Belt) |
 | `analyze_cluster_jewels` | Analyze a cluster jewel setup from a build file |
 
+### Affixes & Crafting
+
+Read straight out of the installed Path of Building's `Data/ModExplicit.lua` and
+`Data/ModMaster.lua`, so no build needs to be loaded and the Lua bridge is not involved.
+
+| Tool | Description |
+|---|---|
+| `classify_item_affixes` | Resolve mod lines to affixes: prefix/suffix counts, open slots, tiers, hybrids |
+| `list_craftable_mods` | Bench crafts an item class can take at a given item level |
+| `find_affix_tiers` | Every tier of a stat: type, minimum item level, value range, base tags |
+
+A hybrid affix prints several lines, and counting those lines separately inverts the
+answer: `Pixie's` is one prefix that prints both an energy shield roll and a stun and
+block recovery roll. `classify_item_affixes` resolves the affix, not the lines.
+
 **`suggest_optimal_nodes` goals**: `damage`, `defense`, `life`, `es`, `resist`, `speed`
 
 **Defensive layers**:

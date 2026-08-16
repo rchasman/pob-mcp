@@ -82,9 +82,13 @@ comparing DPS against a top build is comparing two numbers that both exclude it.
 
 Do these in order. Skipping a step produces advice the user cannot act on.
 
-**1. Classify every mod as prefix or suffix** against `Data/ModExplicit.lua` (`type = "Prefix"|"Suffix"`) and `Data/ModMaster.lua` for bench crafts.
+**1 and 2. Classify every mod, hybrids included.** Never read the Lua data files by hand.
 
-**2. Reconcile hybrids.** One affix can print several lines. If your count exceeds 3 prefixes or 3 suffixes, you have split a hybrid, find it before continuing.
+```
+classify_item_affixes(mod_lines: [...])  -> prefix/suffix counts, open slots, tiers
+```
+
+One affix can print several lines, and the tool reports the affix rather than the lines.
 
 ```
 LocalIncreasedEnergyShieldPercentAndStunRecovery  Prefix "Pixie's"
@@ -92,7 +96,7 @@ LocalIncreasedEnergyShieldPercentAndStunRecovery  Prefix "Pixie's"
   -> (6-7)% increased Stun and Block Recovery
 ```
 
-Counting that stun line as a suffix turns "one open suffix" into "full, nothing possible", the exact inversion of the right answer.
+Counting that stun line as a suffix turns "one open suffix" into "full, nothing possible", the exact inversion of the right answer. Two things in the output still need you: lines listed as **unmatched** are implicits, unique mods, corruptions, enchants or Eldritch mods and occupy no slot, and an affix flagged **ambiguous** has two readings the data cannot separate, so say so instead of picking one.
 
 **3. Match slot types.** A craft can only occupy a slot of its own type.
 
@@ -105,13 +109,30 @@ Counting that stun line as a suffix turns "one open suffix" into "full, nothing 
 
 You cannot recraft a prefix into a resistance. Check the slot type of the mod being *replaced*, not just the one being added.
 
-**4. Gate by item level.** Read `Item Level` off the item and filter `ModMaster.lua` to `level <= ilvl`. An ilvl 45 body armour cannot take the ilvl 50 resistance tier; an ilvl 23 ring is stuck two tiers down.
+**4. Gate by item level.** Read `Item Level` off the item and ask for what the bench can
+actually apply to it.
+
+```
+list_craftable_mods(item_class: "Body Armour", item_level: 45, affix_type: "Suffix")
+```
+
+An ilvl 45 body armour cannot take the ilvl 50 resistance tier; an ilvl 23 ring is stuck
+two tiers down. The tool lists what the item level locks out separately, which is the
+number that tells the player whether a better base is worth buying.
 
 **5. Check attribute requirements** after any swap: `Str`/`Dex`/`Int` against `ReqStr`/`ReqDex`/`ReqInt`. PoB reports full stats for a character whose gear would be disabled in game.
 
-**6. Price the affix before you price the item.** Search `ModExplicit.lua` for the stat
-you actually need and read its tier, `type`, `level` and `weightKey` slot list. One T1
-suffix routinely matches a several-hundred-chaos unique built around the same stat:
+**6. Price the affix before you price the item.**
+
+```
+find_affix_tiers(search: "Chaos Resistance", affix_type: "Suffix", slot_tags: ["ring"])
+```
+
+Read the tier, `type`, `level` and the base tags it rolls on. Those tags are PoB's own
+vocabulary, not slot names: body armour bases carry `str_armour` / `dex_armour` /
+`int_armour` and their hybrids, and influenced variants add a suffix like `_elder`, so
+pass several tags rather than guessing one. One T1 suffix routinely matches a
+several-hundred-chaos unique built around the same stat:
 `of Bameth` is +(31&ndash;35)% chaos resistance at ilvl 81 on rings, amulets, belts and
 armour. A recommendation that only ranks uniques has skipped the cheapest answer,
 and rares are the only items whose affixes the player chooses.
