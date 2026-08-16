@@ -1,25 +1,18 @@
 // Regression smoke test: the adapter must report PoB's real state, and must not
 // die on a response it cannot serialise.
-// Usage: POB_PATH=/path/to/PathOfBuilding/src node tests/smoke/state-truthfulness.mjs
+// Usage: node tests/smoke/state-truthfulness.mjs   (set POB_PATH only to force a checkout)
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { PoBLuaApiClient } from '../../build/pobLuaBridge.js';
+import { smokePoBSrc } from './pobSource.mjs';
 
-const cwd = process.env.POB_PATH || process.env.POB_FORK_PATH;
-if (!cwd) throw new Error('POB_PATH must point to a stock PoB src directory.');
-
-// A stock fork checkout ships runtime/ next to src/, and the bridge derives the
-// Lua search paths from cwd on that assumption. An installed PoB app keeps them
-// elsewhere, so allow both to be supplied explicitly.
-const env = { POB_API_STDIO: '0' };
-if (process.env.POB_LUA_PATH) env.LUA_PATH = process.env.POB_LUA_PATH;
-if (process.env.POB_LUA_CPATH) env.LUA_CPATH = process.env.POB_LUA_CPATH;
+const cwd = smokePoBSrc();
 
 const client = new PoBLuaApiClient({
   cwd,
   cmd: process.env.POB_CMD,
   args: [resolve('lua/vanilla_stdio_bridge.lua')],
-  env,
+  env: { POB_API_STDIO: '0' },
   timeoutMs: 60_000,
 });
 
