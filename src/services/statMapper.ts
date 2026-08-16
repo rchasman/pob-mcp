@@ -16,7 +16,7 @@ export interface StatMapping {
 /**
  * Comprehensive stat mappings between PoB and Trade API
  */
-export const STAT_MAPPINGS: StatMapping[] = [
+const STAT_MAPPINGS: StatMapping[] = [
   // ========================================
   // Pseudo Stats (most commonly used)
   // ========================================
