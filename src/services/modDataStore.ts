@@ -193,7 +193,7 @@ function projectEntry(table: LuaTable, id: string, source: ModEntry["source"]): 
  * Both files emit exactly one entry per line, so we parse line by line and keep only the
  * projection. Parsing the file as one literal would hold every tradeHash in memory at once.
  */
-function parseModFile(text: string, source: ModEntry["source"]): ModEntry[] {
+export function parseModFile(text: string, source: ModEntry["source"]): ModEntry[] {
   return text.split("\n").reduce<ModEntry[]>((entries, line, index) => {
     const trimmed = line.trim();
     if (trimmed === "" || trimmed.startsWith("--") || trimmed === "return {" || trimmed === "}") return entries;
@@ -262,6 +262,3 @@ export function loadAllMods(): ModEntry[] {
   combined = { explicit, master, all: [...explicit, ...master] };
   return combined.all;
 }
-
-/** Exposed for tests that need to parse a verbatim excerpt without an installed PoB. */
-export const parseModText = parseModFile;
