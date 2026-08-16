@@ -29,7 +29,7 @@ try {
   // calc_with returns PoB's live object graph, which contains reference cycles.
   // Before the sanitiser this killed the process on the first call, taking the
   // caller's loaded build with it.
-  const out = await client.calcWith({});
+  const { output: out } = await client.calcWith({});
   check('calc_with returns a serialisable result', typeof out?.TotalDPS === 'number' || typeof out?.Life === 'number');
   check('bridge survives calc_with', client.isAlive());
 
