@@ -6,8 +6,11 @@ import type { HandlerContext } from "../utils/contextBuilder.js";
 import fs from "fs/promises";
 import { wrapHandler } from "../utils/errorHandling.js";
 import { resolveBuildFile } from "../utils/pathSanitizer.js";
-import { BOOTSTRAP_BUILD_NAME } from "../server/bootstrapBuild.js";
+import { heldUserBuild } from "../server/bootstrapBuild.js";
 export type { HandlerContext } from "../utils/contextBuilder.js";
+
+/** PoB reports a build by whatever path it was loaded from; compare the leaf. */
+const basename = (n: string) => n.replace(/\.xml$/i, '').split(/[/\\]/).pop() ?? n;
 
 export async function handleListBuilds(context: HandlerContext) {
   return wrapHandler('list builds', async () => {
@@ -42,14 +45,12 @@ export async function handleAnalyzeBuild(context: HandlerContext, buildName: str
     const luaClient = context.getLuaClient();
 
     if (luaClient) {
-      const basename = (n: string) => n.split(/[/\\]/).pop() ?? n;
       let shouldLoad = true;
       try {
         const info = await luaClient.getBuildInfo();
-        const loadedName: string = info?.name ?? '';
         // Strip .xml suffix for comparison since PoB may omit it
         const requested = buildName.replace(/\.xml$/i, '');
-        const loaded    = loadedName.replace(/\.xml$/i, '');
+        const loaded = (heldUserBuild(info?.name) ?? '').replace(/\.xml$/i, '');
         if (loaded) {
           const sameExact = loaded === requested;
           const sameBase  = basename(loaded) === basename(requested);
@@ -277,15 +278,12 @@ export async function handleCompareBuilds(context: HandlerContext, build1Name: s
   if (luaClient) {
     // Never replace a *different* in-memory build (data-loss risk) — comparing
     // loads both builds into the bridge, which would clobber unsaved work.
-    const basename = (n: string) => n.replace(/\.xml$/i, '').split(/[/\\]/).pop() ?? n;
-    let loadedName = '';
+    let loadedName: string | null = null;
     try {
       const info = await luaClient.getBuildInfo();
-      loadedName = info?.name ?? '';
+      loadedName = heldUserBuild(info?.name);
     } catch { /* no build loaded yet — safe to load */ }
-    // The bootstrap build is not user work — a freshly started bridge always holds
-    // it, so treating it as unsaved changes would block compare_builds outright.
-    if (loadedName && loadedName !== BOOTSTRAP_BUILD_NAME) {
+    if (loadedName) {
       const loaded = basename(loadedName);
       if (loaded !== basename(build1Name) && loaded !== basename(build2Name)) {
         throw new Error(

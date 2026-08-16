@@ -224,6 +224,25 @@ describe('BuildHandlers', () => {
       expect(result.content[0].text).toContain('Medium Priority');
       expect(result.content[0].text).toContain('Constitution');
     });
+
+    it('should load into a bridge that only holds the bootstrap build', async () => {
+      // A fresh bridge always holds the bootstrap build. Reading it as a
+      // different user build made analyze_build skip the Lua load and silently
+      // fall back to XML, reporting another build's stats as this build's.
+      let loaded = false;
+      context.getLuaClient = () => ({
+        getBuildInfo: async () => ({ name: BOOTSTRAP_BUILD_NAME }),
+        loadBuildXml: async () => { loaded = true; },
+        getStats: async () => ({ Life: 4000 }),
+        listSpecs: async () => ({ specs: [] }),
+        listItemSets: async () => ({ itemSets: [] }),
+      }) as any;
+
+      const result = await handleAnalyzeBuild(context, 'test.xml');
+
+      expect(loaded).toBe(true);
+      expect(result.content[0].text).not.toContain('A different build is loaded');
+    });
   });
 
   describe('handleCompareBuilds', () => {
