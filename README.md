@@ -213,18 +213,21 @@ Note the full path to the `src/` directory — that's your `POB_PATH`.
 
 > No fork or patches are required. The server ships its own stdio adapter (`lua/vanilla_stdio_bridge.lua` + `lua/pob_ops.lua`) that loads the stock `HeadlessWrapper.lua` as a library and drives PoB's real calculation engine directly. Every Lua-bridge tool — stats, tree editing, gems, items, config, specs, save/export, anointments, weighted trade queries — works against an unmodified checkout. Call `lua_get_capabilities` at runtime for the authoritative action list.
 
-To verify a checkout locally after building this project:
+To verify locally after building this project:
 
 ```bash
-POB_PATH=/path/to/PathOfBuilding/src npm run test:smoke
+npm run test:smoke
 ```
+
+The smoke tests resolve the engine the same way the server does, so an installed
+PoB needs no configuration. Set `POB_PATH` only to point them at a checkout.
 
 This runs both the adapter contract and MCP stdio transport checks: tool discovery, capabilities, build load, snapshot, stats, items, skills, reversible tree mutation, config, anointment ranking, and build info.
 
 For the deep end-to-end workflow suite:
 
 ```bash
-POB_PATH=/path/to/PathOfBuilding/src npm run test:smoke:full
+npm run test:smoke:full
 ```
 
 This verifies blank-build gem editing, build discovery and file persistence, loading, character-level mutation and restoration, tree search, build validation, configuration/snapshot save-and-restore, and defensive/boss-readiness analysis.
@@ -240,7 +243,7 @@ This verifies MCP discovery plus live league, stat, item-search, price-check, re
 To also exercise the authenticated weighted BIS search (requires your `POESESSID`):
 
 ```bash
-POB_PATH=/path/to/PathOfBuilding/src POE_SESSION_ID=<your POESESSID> npm run test:smoke:weighted
+POE_SESSION_ID=<your POESESSID> npm run test:smoke:weighted
 ```
 
 To verify live crafting-data integration (requires network access):
