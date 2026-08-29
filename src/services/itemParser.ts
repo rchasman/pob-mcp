@@ -7,13 +7,14 @@
  * puts on the clipboard.
  *
  * The recognised-key, tag and catalyst tables are generated from PoB's source —
- * see scripts/generate-item-format.mjs. Nothing here hand-maintains that list,
- * because it moves every league and drifting silently is the failure mode this
- * parser exists to prevent.
+ * see scripts/generate-item-format.mjs. The structure of the format is stable.
+ * What turns over is the vocabulary: a league mechanic adds a metadata key such
+ * as `Intangibility`, and it is retired again when the mechanic goes away.
+ * Generating the list keeps that case from needing a code change.
  *
  * Design rule: never drop a line on the floor. Anything this parser does not
- * understand lands in `unknown` with a reason, so a format change surfaces as a
- * visible report rather than a quietly shorter mod list.
+ * understand lands in `unknown` with a reason, so an unfamiliar key surfaces as
+ * a visible report rather than a quietly shorter mod list.
  */
 import {
   SPEC_KEYS,

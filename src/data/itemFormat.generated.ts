@@ -2,8 +2,9 @@
 // Produced by scripts/generate-item-format.mjs from Path of Building's
 // src/Classes/Item.lua (PoB 2.67.2).
 //
-// Regenerate after a league update:  node scripts/generate-item-format.mjs
-// A diff here means the item text format moved; see src/services/itemParser.ts.
+// Regenerate after updating the PoB checkout:  node scripts/generate-item-format.mjs
+// A diff here is usually a metadata key coming or going with a league mechanic;
+// see src/services/itemParser.ts.
 
 /** Path of Building version these tables were derived from. */
 export const POB_SOURCE_VERSION = "2.67.2";

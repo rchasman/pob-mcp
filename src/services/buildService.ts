@@ -172,12 +172,13 @@ export class BuildService {
       }
 
       // Anything the item parser could not account for. Surfacing it is the
-      // point: a silent gap here is how a league's format change turns into a
-      // quietly wrong answer instead of a visible one.
+      // point: a silent gap here is how an unfamiliar key turns into a quietly
+      // wrong answer instead of a visible one.
       if (unrecognised.length > 0) {
         summary += "=== Unrecognised item text ===\n";
-        summary += "These lines were not understood. The item format may have changed;\n";
-        summary += "re-run `npm run generate:item-format` against a current PoB checkout.\n";
+        summary += "These lines were not understood — most likely a metadata key this\n";
+        summary += "PoB checkout is newer than. Re-run `npm run generate:item-format`\n";
+        summary += "against an up-to-date checkout.\n";
         for (const line of unrecognised) {
           summary += `  ${line}\n`;
         }

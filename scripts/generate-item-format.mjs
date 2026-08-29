@@ -2,11 +2,12 @@
 /**
  * Derive the PoB item-text format tables from Path of Building's own source.
  *
- * The item text format drifts every league — GGG changes what the game puts on
- * the clipboard, and PoB follows. Hand-maintaining a copy of that list is how a
- * parser silently starts reporting metadata as mods. Instead we scrape the
- * tables out of `src/Classes/Item.lua` and commit the result, so a league break
- * shows up as a reviewable diff in `src/data/itemFormat.generated.ts`.
+ * The shape of the format is stable, but its vocabulary is not: a league
+ * mechanic brings a new metadata key, and it is dropped again once the mechanic
+ * ends. A hand-maintained copy of that list is how a parser silently starts
+ * reporting metadata as mods. Instead we scrape the tables out of
+ * `src/Classes/Item.lua` and commit the result, so a change shows up as a
+ * reviewable diff in `src/data/itemFormat.generated.ts`.
  *
  *   node scripts/generate-item-format.mjs [--check]
  *
@@ -212,8 +213,9 @@ const out = `// GENERATED FILE — do not edit by hand.
 // Produced by scripts/generate-item-format.mjs from Path of Building's
 // src/Classes/Item.lua (PoB ${version}).
 //
-// Regenerate after a league update:  node scripts/generate-item-format.mjs
-// A diff here means the item text format moved; see src/services/itemParser.ts.
+// Regenerate after updating the PoB checkout:  node scripts/generate-item-format.mjs
+// A diff here is usually a metadata key coming or going with a league mechanic;
+// see src/services/itemParser.ts.
 
 /** Path of Building version these tables were derived from. */
 export const POB_SOURCE_VERSION = ${JSON.stringify(version)};
