@@ -140,6 +140,127 @@ describe("itemParser — variant selection", () => {
   });
 });
 
+describe("itemParser — variant groups", () => {
+  // PoB's newer selection scheme. It *replaces* the six-slot one: an item using
+  // groups has no `Selected Variant` and no `Has Alt Variant*` lines at all
+  // (Item.lua:1940-1975), so a parser keyed on those sees an empty selection
+  // and — if it skips filtering when nothing is selected — reports every
+  // variant mod on the item instead of the two or three that are live.
+  const grouped = item(`
+    Rarity: UNIQUE
+    Watcher's Eye
+    Prismatic Jewel
+    Variant: None
+    Variant: Discipline ES Regen
+    Variant: Malevolence DoT
+    Variant: Wrath Pen
+    Selected Variant Group: 1=3
+    Selected Variant Group: 2=2
+    Implicits: 0
+    {group:1}{variant:2}Regenerate 2% of Energy Shield per Second while affected by Discipline
+    {group:1}{variant:3}+20% to Damage over Time Multiplier while affected by Malevolence
+    {group:1}{variant:4}Damage Penetrates 12% Lightning Resistance while affected by Wrath
+    {group:2}{variant:2}Regenerate 2% of Energy Shield per Second while affected by Discipline
+    {group:2}{variant:3}+20% to Damage over Time Multiplier while affected by Malevolence
+  `);
+
+  it("resolves one mod per group, with no duplicates", () => {
+    const parsed = parseItem(grouped);
+    expect(parsed.usesVariantGroups).toBe(true);
+    expect([...parsed.variantGroupSelections]).toEqual([
+      [1, 3],
+      [2, 2],
+    ]);
+    expect(parsed.mods.map((m) => m.text)).toEqual([
+      "+20% to Damage over Time Multiplier while affected by Malevolence",
+      "Regenerate 2% of Energy Shield per Second while affected by Discipline",
+    ]);
+    expect(parsed.unknown).toHaveLength(0);
+  });
+
+  it("drops a variant mod that belongs to no group", () => {
+    // Item.lua:2137 — in group mode an ungrouped line survives only if it has
+    // no variant list at all. The legacy path would have kept this one.
+    const parsed = parseItem(
+      grouped.replace(
+        "{group:1}{variant:4}Damage Penetrates",
+        "{variant:3}Damage Penetrates"
+      )
+    );
+    expect(parsed.mods.some((m) => m.text.includes("Penetrates"))).toBe(false);
+  });
+
+  it("keeps an untagged mod in group mode", () => {
+    const parsed = parseItem(grouped.replace("Implicits: 0", "Implicits: 0\n5% increased maximum Energy Shield"));
+    expect(parsed.mods.map((m) => m.text)).toContain("5% increased maximum Energy Shield");
+  });
+
+  it("gates a versioned mod on Selected Version", () => {
+    const versioned = item(`
+      Rarity: UNIQUE
+      Bound by Destiny
+      Prismatic Jewel
+      Version: 3.28
+      Version: 3.29
+      Selected Version: 2
+      Variant: None
+      Variant: Old Wording
+      Variant: New Wording
+      Selected Variant Group: 1=2
+      Selected Variant Group: 2=3
+      Implicits: 0
+      {group:1}{variant:2}{version:1}+10% to all Elemental Resistances
+      {group:2}{variant:3}{version:2}+15% to all Elemental Resistances
+    `);
+    const parsed = parseItem(versioned);
+    expect(parsed.selectedVersion).toBe(2);
+    expect(parsed.versionNames).toEqual(["3.28", "3.29"]);
+    // The 3.28 wording is filtered out even though its group selected it.
+    expect(parsed.mods.map((m) => m.text)).toEqual(["+15% to all Elemental Resistances"]);
+  });
+
+  it("reports a grouped mod that carries no variant", () => {
+    const parsed = parseItem(
+      item(`
+        Rarity: UNIQUE
+        Broken Jewel
+        Prismatic Jewel
+        Variant: None
+        Variant: Something
+        Selected Variant Group: 1=2
+        Implicits: 0
+        {group:1}+10 to Strength
+      `)
+    );
+    expect(parsed.unknown).toEqual([
+      expect.objectContaining({ reason: "unresolved-variant-group" }),
+    ]);
+  });
+
+  it("counts a variant selected in two slots twice", () => {
+    // Mageblood sets Allow Duplicate Variants — the same flask effect chosen in
+    // two slots applies twice (Item.lua:GetModLineVariantCount).
+    const parsed = parseItem(
+      item(`
+        Rarity: UNIQUE
+        Mageblood
+        Heavy Belt
+        Variant: None
+        Variant: Utility Flask Effect
+        Selected Variant: 2
+        Has Alt Variant: true
+        Selected Alt Variant: 2
+        Allow Duplicate Variants: true
+        Implicits: 0
+        {variant:2}Utility Flasks applied to you have 100% increased Effect
+      `)
+    );
+    expect(parsed.allowDuplicateVariants).toBe(true);
+    expect(parsed.mods).toHaveLength(2);
+    expect(parsed.mods[0].text).toBe(parsed.mods[1].text);
+  });
+});
+
 describe("itemParser — catalysts", () => {
   const ring = (catalystLine: string) =>
     item(`
@@ -333,7 +454,11 @@ describe("itemParser — the unknown channel", () => {
     expect(parsed.mods.map((m) => m.text)).toEqual(["+80 to maximum Life"]);
   });
 
-  it("flags variant-group selection as unresolved", () => {
+  it("flags grouped mods that have no group selection to resolve them", () => {
+    // PoB always writes `Selected Variant Group` alongside `{group:}` mods. An
+    // item carrying only the legacy `Selected Variant` cannot be resolved, and
+    // every grouped mod would drop out — so say so rather than return a short
+    // mod list that looks complete.
     const parsed = parseItem(
       item(`
         Rarity: UNIQUE
@@ -347,6 +472,7 @@ describe("itemParser — the unknown channel", () => {
     expect(parsed.unknown).toEqual([
       expect.objectContaining({ reason: "unresolved-variant-group" }),
     ]);
+    expect(parsed.mods).toHaveLength(0);
   });
 });
 

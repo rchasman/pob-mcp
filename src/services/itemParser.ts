@@ -99,10 +99,24 @@ export interface ParsedItem {
   catalystQuality?: number;
   /** `Variant:` entries in file order; index 1 is PoB's "None" sentinel. */
   variantNames: string[];
+  /** `Version:` entries in file order, for items carrying several mod pools. */
+  versionNames: string[];
   /** The base `Selected Variant` slot on its own. */
   selectedVariant?: number;
   /** Every selected variant id across the base slot and the five alt slots. */
   selectedVariants: number[];
+  /**
+   * True when the item uses the group-based selection scheme. PoB then writes
+   * `Selected Variant Group: g=v` *instead of* `Selected Variant`, and omits
+   * every `Has Alt Variant*` line, so the two schemes never coexist.
+   */
+  usesVariantGroups: boolean;
+  /** `Selected Variant Group: g=v` — group id to the variant it selected. */
+  variantGroupSelections: Map<number, number>;
+  /** `Selected Version:` — gates which `{version:}` mods are live. */
+  selectedVersion?: number;
+  /** Mageblood: the same variant may be selected in more than one slot. */
+  allowDuplicateVariants: boolean;
   implicits: ParsedModLine[];
   explicits: ParsedModLine[];
   /** Implicits followed by explicits, in file order. */
@@ -157,6 +171,61 @@ function applyRange(line: string, range: number | undefined, scalar: number): st
     out = out.replace(/-?\d+\.?\d*/g, (m) => `${Math.round(Number(m) * scalar * 100) / 100}`);
   }
   return out;
+}
+
+/**
+ * Is this mod line live on the item? A faithful port of
+ * `Item.lua:CheckModLineVariant`.
+ *
+ * Group mode is a replacement for the old six-slot scheme, not an addition, so
+ * the two branches are exclusive. Three of its rules differ from the legacy
+ * path and each one silently changes the mod list if missed:
+ *
+ *   - a `{version:}` mod needs `Selected Version` to match, or it is gone;
+ *   - a `{group:}` mod with no `{variant:}` is dropped;
+ *   - in group mode a `{variant:}` mod with *no* `{group:}` is dropped, where
+ *     the legacy path would have kept it.
+ */
+function isModLineLive(
+  item: ParsedItem,
+  mod: Pick<TagResult, "variantIds" | "groupIds" | "versionIds">,
+  legacySelections: Set<number>
+): boolean {
+  if (item.usesVariantGroups) {
+    if (
+      mod.versionIds.length > 0 &&
+      (item.selectedVersion === undefined || !mod.versionIds.includes(item.selectedVersion))
+    ) {
+      return false;
+    }
+    if (mod.groupIds.length > 0) {
+      if (mod.variantIds.length === 0) return false;
+      return mod.groupIds.some((groupId) => {
+        const selected = item.variantGroupSelections.get(groupId);
+        return selected !== undefined && mod.variantIds.includes(selected);
+      });
+    }
+    return mod.variantIds.length === 0;
+  }
+  return mod.variantIds.length === 0 || mod.variantIds.some((id) => legacySelections.has(id));
+}
+
+/**
+ * How many times this mod applies — `Item.lua:GetModLineVariantCount`.
+ *
+ * Normally 0 or 1. Mageblood sets `Allow Duplicate Variants`, which lets more
+ * than one slot pick the same variant; the mod then applies once per slot.
+ */
+function modLineVariantCount(
+  item: ParsedItem,
+  mod: Pick<TagResult, "variantIds" | "groupIds" | "versionIds">,
+  legacySelections: Set<number>,
+  slotSelections: number[] = []
+): number {
+  if (!item.allowDuplicateVariants || mod.variantIds.length === 0) {
+    return isModLineLive(item, mod, legacySelections) ? 1 : 0;
+  }
+  return slotSelections.filter((id) => mod.variantIds.includes(id)).length;
 }
 
 interface TagResult {
@@ -218,7 +287,11 @@ export function parseItem(text: string): ParsedItem {
     base: "",
     meta: new Map(),
     variantNames: [],
+    versionNames: [],
     selectedVariants: [],
+    usesVariantGroups: false,
+    variantGroupSelections: new Map(),
+    allowDuplicateVariants: false,
     implicits: [],
     explicits: [],
     mods: [],
@@ -258,6 +331,10 @@ export function parseItem(text: string): ParsedItem {
   // own `Has Alt Variant*` flag. Watcher's Eye, Megalomaniac, Militant Faith and
   // friends roll two or three independent mods this way.
   const altSuffixes = ["", " Two", " Three", " Four", " Five"];
+  // PoB flips into group mode on the first `{group:}` / `{version:}` tag or
+  // `Selected Variant Group` / `Selected Version` line. It parses in one pass;
+  // we take two, so look ahead for the tags before reading the metadata.
+  item.usesVariantGroups = lines.some((l) => /\{group:|\{version:/.test(l));
   const hasAlt = new Map<string, boolean>();
   const selectedAlt = new Map<string, number>();
   let selectedVariant: number | undefined;
@@ -277,7 +354,19 @@ export function parseItem(text: string): ParsedItem {
     const value = m[2];
 
     if (key === "Variant") item.variantNames.push(stripColourCodes(value));
+    else if (key === "Version") item.versionNames.push(stripColourCodes(value));
     else if (key === "Selected Variant") selectedVariant = Number(value);
+    else if (key === "Selected Version") {
+      item.selectedVersion = Number(value);
+      item.usesVariantGroups = true;
+    } else if (key === "Selected Variant Group") {
+      // `Selected Variant Group: 1=3` — Item.lua:765.
+      const pair = value.match(/^(\d+)\s*=\s*(\d+)$/);
+      if (pair) {
+        item.variantGroupSelections.set(Number(pair[1]), Number(pair[2]));
+        item.usesVariantGroups = true;
+      }
+    } else if (key === "Allow Duplicate Variants") item.allowDuplicateVariants = value === "true";
     else if (key === "Note") item.notes.push(stripColourCodes(value));
     else if (key === "Quality") item.quality = Number(value);
     else if (key === "Catalyst") item.catalyst = value;
@@ -313,10 +402,19 @@ export function parseItem(text: string): ParsedItem {
     }
   }
 
+  // `active` answers "is this variant selected at all"; `slotSelections` keeps
+  // one entry per slot so a variant chosen twice counts twice (Mageblood).
   const active = new Set<number>();
-  if (selectedVariant !== undefined) active.add(selectedVariant);
+  const slotSelections: number[] = [];
+  if (selectedVariant !== undefined) {
+    active.add(selectedVariant);
+    slotSelections.push(selectedVariant);
+  }
   for (const suffix of altSuffixes) {
-    if (hasAlt.get(suffix) && selectedAlt.has(suffix)) active.add(selectedAlt.get(suffix)!);
+    if (hasAlt.get(suffix) && selectedAlt.has(suffix)) {
+      active.add(selectedAlt.get(suffix)!);
+      slotSelections.push(selectedAlt.get(suffix)!);
+    }
   }
   item.selectedVariant = selectedVariant;
   item.selectedVariants = [...active].sort((a, b) => a - b);
@@ -344,6 +442,8 @@ export function parseItem(text: string): ParsedItem {
   if (modStart === -1) modStart = l;
   let seen = 0;
   let enchantCount = 0;
+  /** The mod emitted by the previous line, once per copy, for rejoining wraps. */
+  let previousCopies: ParsedModLine[] = [];
 
   for (let i = modStart; i < lines.length; i++) {
     const line = lines[i];
@@ -355,30 +455,38 @@ export function parseItem(text: string): ParsedItem {
     for (const tag of parsed.unknownTags) {
       item.unknown.push({ line, reason: "unrecognised-tag", detail: `{${tag}}` });
     }
-    if (parsed.groupIds.length > 0 || parsed.versionIds.length > 0) {
-      item.unknown.push({
-        line,
-        reason: "unresolved-variant-group",
-        detail: "uses {group:}/{version:} selection, which this parser does not resolve yet",
-      });
+    // A grouped line must name the variants it belongs to, or PoB cannot place
+    // it in any group (Item.lua:2126 returns false, and ConPrintf warns).
+    if (item.usesVariantGroups && parsed.groupIds.length > 0) {
+      if (parsed.variantIds.length === 0) {
+        item.unknown.push({
+          line,
+          reason: "unresolved-variant-group",
+          detail: "grouped mod line carries no {variant:} — PoB cannot place it either",
+        });
+      } else if (item.variantGroupSelections.size === 0) {
+        // Grouped mods with nothing saying what each group picked. PoB always
+        // writes both together, so this is a malformed or half-migrated item —
+        // every grouped mod would drop out, and that must not happen quietly.
+        item.unknown.push({
+          line,
+          reason: "unresolved-variant-group",
+          detail: "item has {group:} mods but no `Selected Variant Group` line to resolve them",
+        });
+      }
     }
-    // A mod tagged with variants is only present when one of its ids is selected.
-    if (
-      parsed.variantIds.length > 0 &&
-      active.size > 0 &&
-      !parsed.variantIds.some((id) => active.has(id))
-    ) {
-      continue;
-    }
+    const copies = modLineVariantCount(item, parsed, active, slotSelections);
+    if (copies === 0) continue;
     const body = stripColourCodes(parsed.stripped);
     if (!body) continue;
 
     // PoB wraps a long mod onto a second physical line; the continuation starts
     // lowercase and repeats the variant tag.
-    const previous = item.mods[item.mods.length - 1];
-    if (previous && /^[a-z]/.test(body)) {
-      previous.text = `${previous.text} ${body}`;
-      previous.raw = `${previous.raw} ${line}`;
+    if (previousCopies.length > 0 && /^[a-z]/.test(body)) {
+      for (const previous of previousCopies) {
+        previous.text = `${previous.text} ${body}`;
+        previous.raw = `${previous.raw} ${line}`;
+      }
       continue;
     }
 
@@ -428,9 +536,14 @@ export function parseItem(text: string): ParsedItem {
       corruptedRange: parsed.corruptedRange,
       catalystScalar: scalar,
     };
-    item.mods.push(mod);
-    if (type === "implicit" || type === "enchant") item.implicits.push(mod);
-    else item.explicits.push(mod);
+    previousCopies = [];
+    for (let copy = 0; copy < copies; copy++) {
+      const emitted = copy === 0 ? mod : { ...mod };
+      previousCopies.push(emitted);
+      item.mods.push(emitted);
+      if (type === "implicit" || type === "enchant") item.implicits.push(emitted);
+      else item.explicits.push(emitted);
+    }
   }
 
   return item;
