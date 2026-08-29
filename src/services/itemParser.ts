@@ -1,0 +1,443 @@
+/**
+ * Path of Building item text parser.
+ *
+ * This is the offline half of the server: reading a build file must not depend
+ * on the Lua bridge being configured. The format is PoB's own serialisation
+ * (`Item.lua:BuildRaw`), which is close to but not identical to what the game
+ * puts on the clipboard.
+ *
+ * The recognised-key, tag and catalyst tables are generated from PoB's source —
+ * see scripts/generate-item-format.mjs. Nothing here hand-maintains that list,
+ * because it moves every league and drifting silently is the failure mode this
+ * parser exists to prevent.
+ *
+ * Design rule: never drop a line on the floor. Anything this parser does not
+ * understand lands in `unknown` with a reason, so a format change surfaces as a
+ * visible report rather than a quietly shorter mod list.
+ */
+import {
+  SPEC_KEYS,
+  SPEC_KEY_PATTERNS,
+  MOD_LINE_TAGS,
+  LINE_FLAGS,
+  CATALYST_NAMES,
+  CATALYST_DESCRIPTORS,
+  CATALYST_TAGS,
+  STANDALONE_FLAGS,
+  POB_SOURCE_VERSION,
+} from "../data/itemFormat.generated.js";
+
+const SPEC_KEY_SET = new Set(SPEC_KEYS.map((k) => k.replace(/:$/, "")));
+/** Keys PoB matches by pattern: the `*BasePercentile` family, `Quality (X Modifiers)`. */
+const SPEC_KEY_REGEXES = SPEC_KEY_PATTERNS.map((p) => new RegExp(p.regex));
+
+function isSpecKey(key: string): boolean {
+  return SPEC_KEY_SET.has(key) || SPEC_KEY_REGEXES.some((re) => re.test(key));
+}
+const MOD_TAG_SET = new Set(MOD_LINE_TAGS);
+const LINE_FLAG_SET = new Set(LINE_FLAGS);
+const STANDALONE_FLAG_MAP = new Map(STANDALONE_FLAGS.map(([line, prop]) => [line, prop]));
+
+/** `^7`, `^4`, `^xRRGGBB` — PoB's inline colour codes. */
+const COLOUR_CODE = /\^(?:x[0-9A-Fa-f]{6}|\d)/g;
+/** A `{key}` or `{key:value}` prefix on a mod line. */
+const TAG = /\{(\w*)(?::([^}]*))?\}/g;
+/** PoB's spec-line grammar, mirroring `^([%a %(%)]+:?): (.+)$`. */
+const SPEC_LINE = /^([A-Za-z ()]+:?): (.+)$/;
+/** The `Requires Level 68` shape, which has no colon. */
+const REQUIRES_LINE = /^(Requires [A-Za-z]+) (.+)$/;
+/** `Quality (Attribute Modifiers): +20%` — the game's catalyst wording. */
+const GAME_CATALYST = /^Quality \(([A-Za-z ]+) Modifiers\)$/;
+/** A rolled range such as `(1-1.5)` or `+(30-50)`. */
+const RANGE_VALUE = /([+-]?)\((-?\d+\.?\d*)-(-?\d+\.?\d*)\)/g;
+
+export type UnknownReason =
+  | "unrecognised-key"
+  | "unrecognised-tag"
+  | "unresolved-variant-group"
+  | "approximated-catalyst";
+
+export interface UnknownLine {
+  /** The line exactly as it appeared, colour codes intact. */
+  line: string;
+  reason: UnknownReason;
+  /** What specifically was not understood — a key name, a tag name. */
+  detail: string;
+}
+
+export interface ParsedModLine {
+  /** Display text: tags stripped, ranges resolved, colour codes removed. */
+  text: string;
+  /** The line as stored, before tag stripping. */
+  raw: string;
+  /** implicit | explicit | enchant | crafted | fractured | scourge | crucible */
+  type: string;
+  /** `{crafted}`-style boolean markers present on the line. */
+  flags: string[];
+  /** `{tags:...}` — the join key catalyst scaling uses. */
+  tags: string[];
+  variantIds: number[];
+  groupIds: number[];
+  versionIds: number[];
+  /** `{range:0.7}` — where in the roll this value sits, 0..1. */
+  range?: number;
+  corruptedRange?: number;
+  /** Catalyst multiplier applied to this line; 1 when none applies. */
+  catalystScalar: number;
+}
+
+export interface ParsedItem {
+  rarity: string;
+  name: string;
+  base: string;
+  itemClass?: string;
+  /** Every `Key: value` line PoB recognises, keyed by name. */
+  meta: Map<string, string>;
+  quality?: number;
+  /** Catalyst display name, e.g. "Attribute". */
+  catalyst?: string;
+  catalystQuality?: number;
+  /** `Variant:` entries in file order; index 1 is PoB's "None" sentinel. */
+  variantNames: string[];
+  /** The base `Selected Variant` slot on its own. */
+  selectedVariant?: number;
+  /** Every selected variant id across the base slot and the five alt slots. */
+  selectedVariants: number[];
+  implicits: ParsedModLine[];
+  explicits: ParsedModLine[];
+  /** Implicits followed by explicits, in file order. */
+  mods: ParsedModLine[];
+  /** Whole-line markers: corrupted, mirrored, split, fractured, synthesised. */
+  itemFlags: string[];
+  /** `Note:` lines — author commentary, not mods. Colour codes stripped. */
+  notes: string[];
+  unknown: UnknownLine[];
+  /** PoB build the format tables were derived from. */
+  formatVersion: string;
+}
+
+export function stripColourCodes(s: string): string {
+  return s.replace(COLOUR_CODE, "").trim();
+}
+
+/**
+ * PoB's rule (`Item.lua:getCatalystScalar`): a catalyst scales a mod when any of
+ * the catalyst's tags appears in the mod's `{tags:...}`. The `prefix`/`suffix`
+ * line flags count as pseudo-tags so sinistral/dextral catalysts work.
+ */
+function catalystScalarFor(
+  catalystIndex: number | undefined,
+  quality: number,
+  tags: string[],
+  flags: string[]
+): number {
+  if (catalystIndex === undefined) return 1;
+  if (flags.includes("unscalable")) return 1;
+  const catalystTags = CATALYST_TAGS[catalystIndex];
+  if (!catalystTags || tags.length === 0) return 1;
+  const lookup = new Set(tags);
+  for (const flag of ["prefix", "suffix"]) {
+    if (flags.includes(flag)) lookup.add(flag);
+  }
+  return catalystTags.some((t) => lookup.has(t)) ? (100 + quality) / 100 : 1;
+}
+
+/** Resolve `(min-max)` to the value at `range`, then apply the catalyst scalar. */
+function applyRange(line: string, range: number | undefined, scalar: number): string {
+  let out = line;
+  if (range !== undefined) {
+    out = out.replace(RANGE_VALUE, (_m, sign: string, min: string, max: string) => {
+      let value = Number(min) + range * (Number(max) - Number(min));
+      if (sign === "-") value *= -1;
+      const rounded = Math.round(value * 100) / 100;
+      return sign === "+" && rounded > 0 ? `+${rounded}` : `${rounded}`;
+    });
+  }
+  if (scalar !== 1) {
+    out = out.replace(/-?\d+\.?\d*/g, (m) => `${Math.round(Number(m) * scalar * 100) / 100}`);
+  }
+  return out;
+}
+
+interface TagResult {
+  stripped: string;
+  flags: string[];
+  tags: string[];
+  variantIds: number[];
+  groupIds: number[];
+  versionIds: number[];
+  range?: number;
+  corruptedRange?: number;
+  unknownTags: string[];
+}
+
+function parseTags(line: string): TagResult {
+  const r: TagResult = {
+    stripped: "",
+    flags: [],
+    tags: [],
+    variantIds: [],
+    groupIds: [],
+    versionIds: [],
+    unknownTags: [],
+  };
+  const ids = (v: string) => (v.match(/\d+/g) ?? []).map(Number);
+  r.stripped = line
+    .replace(TAG, (_m, key: string, value: string | undefined) => {
+      const val = value ?? "";
+      if (key === "variant") r.variantIds = ids(val);
+      else if (key === "group") r.groupIds = ids(val).filter((n) => n > 0);
+      else if (key === "version") r.versionIds = ids(val);
+      else if (key === "tags") r.tags = val.match(/[A-Za-z_]+/g) ?? [];
+      else if (key === "range") r.range = Number(val);
+      else if (key === "corruptedRange") r.corruptedRange = Number(val);
+      else if (key === "modGroup") {
+        /* grouping hint only — no effect on the mod */
+      } else if (LINE_FLAG_SET.has(key)) r.flags.push(key);
+      else if (!MOD_TAG_SET.has(key)) r.unknownTags.push(key);
+      return "";
+    })
+    .trim();
+  return r;
+}
+
+/**
+ * Parse one item's raw text.
+ *
+ * `text` is the body of an `<Item>` element, or anything in PoB's item format.
+ */
+export function parseItem(text: string): ParsedItem {
+  const lines = (text ?? "")
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  const item: ParsedItem = {
+    rarity: "NORMAL",
+    name: "?",
+    base: "",
+    meta: new Map(),
+    variantNames: [],
+    selectedVariants: [],
+    implicits: [],
+    explicits: [],
+    mods: [],
+    itemFlags: [],
+    notes: [],
+    unknown: [],
+    formatVersion: POB_SOURCE_VERSION,
+  };
+
+  let l = 0;
+  if (lines[l]?.startsWith("Item Class:")) {
+    item.itemClass = lines[l].slice("Item Class:".length).trim();
+    l++;
+  }
+  const rarityMatch = lines[l]?.match(/^Rarity: (\w+)/);
+  if (rarityMatch) {
+    item.rarity = rarityMatch[1].toUpperCase();
+    l++;
+  }
+  if (lines[l] === "--------") l++;
+
+  const unidentified = lines.includes("Unidentified");
+  if (lines[l]) {
+    item.name = stripColourCodes(lines[l]);
+    l++;
+    // Magic and normal items fold the base into the name, so the next line is
+    // metadata rather than a base type. Same for unidentified items.
+    if (!(item.rarity === "NORMAL" || item.rarity === "MAGIC" || unidentified)) {
+      if (lines[l] && !SPEC_LINE.test(lines[l]) && lines[l] !== "--------") {
+        item.base = stripColourCodes(lines[l]);
+        l++;
+      }
+    }
+  }
+
+  // Selection slots: the base variant plus five alternates, each gated by its
+  // own `Has Alt Variant*` flag. Watcher's Eye, Megalomaniac, Militant Faith and
+  // friends roll two or three independent mods this way.
+  const altSuffixes = ["", " Two", " Three", " Four", " Five"];
+  const hasAlt = new Map<string, boolean>();
+  const selectedAlt = new Map<string, number>();
+  let selectedVariant: number | undefined;
+  let implicitCount = 0;
+  let modStart = -1;
+
+  for (let i = l; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === "--------") continue;
+    if (STANDALONE_FLAG_MAP.has(line)) {
+      item.itemFlags.push(STANDALONE_FLAG_MAP.get(line)!);
+      continue;
+    }
+    const m = line.match(SPEC_LINE) ?? line.match(REQUIRES_LINE);
+    if (!m) continue;
+    const key = m[1].replace(/:$/, "");
+    const value = m[2];
+
+    if (key === "Variant") item.variantNames.push(stripColourCodes(value));
+    else if (key === "Selected Variant") selectedVariant = Number(value);
+    else if (key === "Note") item.notes.push(stripColourCodes(value));
+    else if (key === "Quality") item.quality = Number(value);
+    else if (key === "Catalyst") item.catalyst = value;
+    else if (key === "CatalystQuality") item.catalystQuality = Number(value);
+    else if (key === "Implicits") {
+      implicitCount = Number(value);
+      modStart = i + 1;
+    } else {
+      const gameCatalyst = key.match(GAME_CATALYST);
+      if (gameCatalyst) {
+        item.catalyst = gameCatalyst[1];
+        item.catalystQuality = Number(value.match(/(\d+)%/)?.[1] ?? 20);
+        continue;
+      }
+      let matchedAlt = false;
+      for (const suffix of altSuffixes) {
+        if (key === `Has Alt Variant${suffix}`) {
+          hasAlt.set(suffix, value === "true");
+          matchedAlt = true;
+        } else if (key === `Selected Alt Variant${suffix}`) {
+          selectedAlt.set(suffix, Number(value));
+          matchedAlt = true;
+        }
+      }
+      if (matchedAlt) continue;
+      if (isSpecKey(key)) {
+        if (!item.meta.has(key)) item.meta.set(key, value);
+      } else if (modStart === -1 || i < modStart) {
+        // A `Key: value` line above the mod section that PoB would recognise and
+        // we do not. Almost certainly a new league's metadata.
+        item.unknown.push({ line, reason: "unrecognised-key", detail: key });
+      }
+    }
+  }
+
+  const active = new Set<number>();
+  if (selectedVariant !== undefined) active.add(selectedVariant);
+  for (const suffix of altSuffixes) {
+    if (hasAlt.get(suffix) && selectedAlt.has(suffix)) active.add(selectedAlt.get(suffix)!);
+  }
+  item.selectedVariant = selectedVariant;
+  item.selectedVariants = [...active].sort((a, b) => a - b);
+
+  // A saved build stores the catalyst's item name (`Catalyst: Intrinsic`); the
+  // game's clipboard text names the mod group instead (`Quality (Attribute
+  // Modifiers)`). Both index the same CATALYST_TAGS row.
+  const catalystIndex = item.catalyst
+    ? Math.max(
+        CATALYST_NAMES.indexOf(item.catalyst),
+        CATALYST_DESCRIPTORS.indexOf(item.catalyst)
+      )
+    : -1;
+  const catalystQuality = item.catalystQuality ?? 20;
+  if (item.catalyst && item.catalyst !== "None" && catalystIndex < 0) {
+    // A catalyst PoB knows and we don't — a new one was added. Say so rather
+    // than silently reporting the item's mods at their unscaled values.
+    item.unknown.push({
+      line: `Catalyst: ${item.catalyst}`,
+      reason: "unrecognised-key",
+      detail: `unknown catalyst "${item.catalyst}"; mod values are not scaled`,
+    });
+  }
+
+  if (modStart === -1) modStart = l;
+  let seen = 0;
+  let enchantCount = 0;
+
+  for (let i = modStart; i < lines.length; i++) {
+    const line = lines[i];
+    if (line === "--------" || STANDALONE_FLAG_MAP.has(line)) continue;
+    const specMatch = line.match(SPEC_LINE) ?? line.match(REQUIRES_LINE);
+    if (specMatch && isSpecKey(specMatch[1].replace(/:$/, ""))) continue;
+
+    const parsed = parseTags(line);
+    for (const tag of parsed.unknownTags) {
+      item.unknown.push({ line, reason: "unrecognised-tag", detail: `{${tag}}` });
+    }
+    if (parsed.groupIds.length > 0 || parsed.versionIds.length > 0) {
+      item.unknown.push({
+        line,
+        reason: "unresolved-variant-group",
+        detail: "uses {group:}/{version:} selection, which this parser does not resolve yet",
+      });
+    }
+    // A mod tagged with variants is only present when one of its ids is selected.
+    if (
+      parsed.variantIds.length > 0 &&
+      active.size > 0 &&
+      !parsed.variantIds.some((id) => active.has(id))
+    ) {
+      continue;
+    }
+    const body = stripColourCodes(parsed.stripped);
+    if (!body) continue;
+
+    // PoB wraps a long mod onto a second physical line; the continuation starts
+    // lowercase and repeats the variant tag.
+    const previous = item.mods[item.mods.length - 1];
+    if (previous && /^[a-z]/.test(body)) {
+      previous.text = `${previous.text} ${body}`;
+      previous.raw = `${previous.raw} ${line}`;
+      continue;
+    }
+
+    const scalar = catalystScalarFor(
+      catalystIndex >= 0 ? catalystIndex : undefined,
+      catalystQuality,
+      parsed.tags,
+      parsed.flags
+    );
+    // Count values on the range-resolved text: `(27-30)% increased Fire Damage`
+    // is one value expressed as a roll, not two.
+    const unscaled = applyRange(body, parsed.range, 1);
+    if (scalar !== 1 && (unscaled.match(/-?\d+\.?\d*/g) ?? []).length > 1) {
+      // PoB restricts scaling to the values its scalability data marks; we scale
+      // every number on the line, which can differ on multi-value mods.
+      item.unknown.push({
+        line,
+        reason: "approximated-catalyst",
+        detail: `catalyst scalar ${scalar} applied to every value on a multi-value mod`,
+      });
+    }
+
+    const crafted = parsed.flags.includes("crafted");
+    let type: string;
+    if (crafted && enchantCount + seen < implicitCount) {
+      type = "enchant";
+      enchantCount++;
+    } else if (seen < implicitCount) {
+      type = "implicit";
+      seen++;
+    } else if (parsed.flags.includes("fractured")) type = "fractured";
+    else if (parsed.flags.includes("scourge")) type = "scourge";
+    else if (parsed.flags.includes("crucible")) type = "crucible";
+    else if (crafted) type = "crafted";
+    else type = "explicit";
+
+    const mod: ParsedModLine = {
+      text: applyRange(body, parsed.range, scalar),
+      raw: line,
+      type,
+      flags: parsed.flags,
+      tags: parsed.tags,
+      variantIds: parsed.variantIds,
+      groupIds: parsed.groupIds,
+      versionIds: parsed.versionIds,
+      range: parsed.range,
+      corruptedRange: parsed.corruptedRange,
+      catalystScalar: scalar,
+    };
+    item.mods.push(mod);
+    if (type === "implicit" || type === "enchant") item.implicits.push(mod);
+    else item.explicits.push(mod);
+  }
+
+  return item;
+}
+
+/** One-line identity, e.g. `[UNIQUE] Watcher's Eye (Prismatic Jewel)`. */
+export function itemLabel(item: ParsedItem): string {
+  const head = `[${item.rarity}] ${item.name}`;
+  return item.base ? `${head} (${item.base})` : head;
+}
