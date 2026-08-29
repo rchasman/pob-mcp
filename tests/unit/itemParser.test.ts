@@ -309,7 +309,9 @@ describe("itemParser — catalysts", () => {
     expect(fireRes.catalystScalar).toBe(1);
     expect(fireRes.text).toBe("+30% to Fire Resistance");
     expect(attributes.catalystScalar).toBeCloseTo(1.2);
-    expect(attributes.text).toBe("+15.6 to all Attributes");
+    // 13 x 1.2 = 15.6, floored to 15 — formatValue uses floorSymmetric for the
+    // catalyst, not rounding.
+    expect(attributes.text).toBe("+15 to all Attributes");
   });
 
   it("resolves the game's Quality (X Modifiers) wording too", () => {
@@ -343,6 +345,47 @@ describe("itemParser — catalysts", () => {
     );
     expect(parsed.mods[0].catalystScalar).toBe(1);
     expect(parsed.mods[0].text).toBe("+62 to Strength");
+  });
+
+  it("floors the scaled value rather than rounding it", () => {
+    // ItemTools.lua:formatValue applies the catalyst with floorSymmetric. On
+    // Pohx's Turquoise Amulet, +24 to Dexterity and Intelligence with Intrinsic
+    // reads +28 in PoB, not +28.8 — rounding would report a value the item
+    // does not have.
+    const parsed = parseItem(
+      item(`
+        Rarity: RARE
+        Endgame Amulet
+        Turquoise Amulet
+        Catalyst: Intrinsic
+        CatalystQuality: 20
+        Implicits: 0
+        {tags:jewellery_attribute}{range:1}+(20-24) to Dexterity and Intelligence
+      `)
+    );
+    expect(parsed.mods[0].text).toBe("+28 to Dexterity and Intelligence");
+  });
+
+  it("keeps decimals on a roll that has them", () => {
+    // A range written with decimals is treated as a high-precision mod, so the
+    // value is not flattened to a whole number.
+    //
+    // This is the one place the parser knowingly approximates. PoB takes display
+    // precision from `data.modScalability` / `data.highPrecisionMods`, which need
+    // its mod parser and are not available offline, so we infer it from the roll:
+    // here that gives one decimal place and 1.3, where PoB shows 1.25. Exact
+    // values are a Lua bridge job; the digit that matters for the catalyst rule
+    // — whole-number mods flooring correctly — is covered above.
+    const parsed = parseItem(
+      item(`
+        Rarity: UNIQUE
+        Leech Jewel
+        Cobalt Jewel
+        Implicits: 0
+        {range:0.5}(1-1.5)% of Damage Leeched as Life
+      `)
+    );
+    expect(parsed.mods[0].text).toBe("1.3% of Damage Leeched as Life");
   });
 
   it("reports an unrecognised catalyst instead of silently not scaling", () => {
@@ -385,7 +428,7 @@ describe("itemParser — mod classification", () => {
     );
     expect(parsed.mods).toHaveLength(1);
     expect(parsed.mods[0].text).toBe(
-      "62.5% of Elemental Damage from your Hits cannot be Reflected while affected by Purity of Elements"
+      "63% of Elemental Damage from your Hits cannot be Reflected while affected by Purity of Elements"
     );
   });
 

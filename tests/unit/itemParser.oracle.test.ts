@@ -22,7 +22,7 @@ interface OracleSample {
 }
 
 const ORACLE = path.resolve(__dirname, "../fixtures/item-oracle.json");
-const oracle: { pobVersion: string; samples: OracleSample[] } = JSON.parse(
+const oracle: { pobVersion: string; pobRevision?: string; samples: OracleSample[] } = JSON.parse(
   fs.readFileSync(ORACLE, "utf-8")
 );
 
@@ -37,7 +37,7 @@ const comparable = (line: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
-describe(`itemParser vs Path of Building ${oracle.pobVersion}`, () => {
+describe(`itemParser vs Path of Building ${oracle.pobVersion}${oracle.pobRevision ? ` (${oracle.pobRevision})` : ""}`, () => {
   it("captured a fixture with something in it", () => {
     expect(oracle.samples.length).toBeGreaterThan(0);
   });

@@ -25,7 +25,7 @@ import {
   CATALYST_DESCRIPTORS,
   CATALYST_TAGS,
   STANDALONE_FLAGS,
-  POB_SOURCE_VERSION,
+  POB_VERSION,
 } from "../data/itemFormat.generated.js";
 
 const SPEC_KEY_SET = new Set(SPEC_KEYS.map((k) => k.replace(/:$/, "")));
@@ -157,21 +157,71 @@ function catalystScalarFor(
   return catalystTags.some((t) => lookup.has(t)) ? (100 + quality) / 100 : 1;
 }
 
-/** Resolve `(min-max)` to the value at `range`, then apply the catalyst scalar. */
+/**
+ * How many decimal places a value is displayed to.
+ *
+ * PoB reads this from `data.modScalability`, keyed per mod. We do not have that
+ * table offline, so we infer it from the roll itself: a range written with
+ * decimals is a high-precision mod, one written with whole numbers is not. That
+ * matches PoB for the ordinary case and is the single approximation in here —
+ * see the note on `applyRange`.
+ */
+function inferredPrecision(min: string, max: string): number {
+  const dp = (v: string) => (v.split(".")[1] ?? "").length;
+  return Math.max(dp(min), dp(max));
+}
+
+const roundTo = (v: number, dp: number) => {
+  const f = 10 ** dp;
+  return Math.round(v * f) / f;
+};
+
+/**
+ * Resolve `(min-max)` to the value at `range`, then apply the catalyst scalar.
+ *
+ * Mirrors `ItemTools.lua:formatValue`, which is order-sensitive and does *not*
+ * round the two steps the same way:
+ *
+ *     value = roundSymmetric(value * precision)          -- resolve the roll
+ *     value = floorSymmetric(value * valueScalar)        -- apply the catalyst
+ *
+ * The scalar is floored, not rounded, so Intrinsic on `+24 to Dexterity and
+ * Intelligence` gives +28 rather than +28.8. Getting that backwards reports a
+ * value the item does not have.
+ *
+ * The approximation: `precision` comes from PoB's per-mod scalability data,
+ * which needs `data.modScalability`, `data.highPrecisionMods` and its mod
+ * parser — none of them available offline. We infer it from the roll instead,
+ * so a mod whose displayed precision differs from its written range can be out
+ * in the last digit. Exact values are a Lua bridge job.
+ */
 function applyRange(line: string, range: number | undefined, scalar: number): string {
+  let precision = 0;
   let out = line;
   if (range !== undefined) {
     out = out.replace(RANGE_VALUE, (_m, sign: string, min: string, max: string) => {
-      let value = Number(min) + range * (Number(max) - Number(min));
+      precision = Math.max(precision, inferredPrecision(min, max));
+      let value = roundTo(Number(min) + range * (Number(max) - Number(min)), precision);
       if (sign === "-") value *= -1;
-      const rounded = Math.round(value * 100) / 100;
-      return sign === "+" && rounded > 0 ? `+${rounded}` : `${rounded}`;
+      if (scalar !== 1) value = floorTo(value * scalar, precision);
+      return sign === "+" && value > 0 ? `+${value}` : `${value}`;
     });
+    return out;
   }
+  // No roll on the line: the values are already final, so only the catalyst
+  // applies. Whole numbers stay whole.
   if (scalar !== 1) {
-    out = out.replace(/-?\d+\.?\d*/g, (m) => `${Math.round(Number(m) * scalar * 100) / 100}`);
+    out = out.replace(/-?\d+\.?\d*/g, (m) =>
+      `${floorTo(Number(m) * scalar, (m.split(".")[1] ?? "").length)}`
+    );
   }
   return out;
+}
+
+/** `floorSymmetric` — truncates toward zero, unlike Math.floor. */
+function floorTo(v: number, dp: number): number {
+  const f = 10 ** dp;
+  return Math.trunc(v * f) / f;
 }
 
 /**
@@ -299,7 +349,7 @@ export function parseItem(text: string): ParsedItem {
     itemFlags: [],
     notes: [],
     unknown: [],
-    formatVersion: POB_SOURCE_VERSION,
+    formatVersion: POB_VERSION,
   };
 
   let l = 0;

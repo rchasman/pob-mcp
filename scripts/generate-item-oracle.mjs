@@ -75,8 +75,18 @@ if (!fs.existsSync(tmp)) {
 
 const captured = fs.readFileSync(tmp, "utf-8");
 fs.rmSync(tmp, { force: true });
-// Normalise to the repo's line endings so the check mode is not platform-dependent.
-const normalised = `${JSON.stringify(JSON.parse(captured), null, 2)}\n`;
+// PoB reports only its release number, which understates a dev checkout that can
+// be well ahead of it. Stamp the revision so the fixture says which PoB made it.
+const oracle = JSON.parse(captured);
+const rev = (args) =>
+  spawnSync("git", ["-C", baseDir, ...args], { encoding: "utf-8" }).stdout?.trim();
+const branch = rev(["rev-parse", "--abbrev-ref", "HEAD"]);
+const commit = rev(["rev-parse", "--short", "HEAD"]);
+if (branch && commit) oracle.pobRevision = `${branch} @ ${commit}`;
+
+// Re-serialise rather than pass the capture through, so check mode is not
+// sensitive to formatting or line endings.
+const normalised = JSON.stringify(oracle, null, 2) + "\n";
 
 if (checkOnly) {
   const current = fs.existsSync(OUT) ? fs.readFileSync(OUT, "utf-8") : "";
@@ -90,5 +100,9 @@ if (checkOnly) {
 } else {
   fs.writeFileSync(OUT, normalised);
   const { pobVersion, samples } = JSON.parse(normalised);
-  console.log(`generate-item-oracle: wrote ${OUT}\n  PoB ${pobVersion}: ${samples.length} samples`);
+  const where = oracle.pobRevision ? ` (${oracle.pobRevision})` : "";
+  console.log(
+    `generate-item-oracle: wrote ${OUT}\n` +
+      `  PoB ${pobVersion}${where}: ${samples.length} samples`
+  );
 }

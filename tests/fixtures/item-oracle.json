@@ -96,5 +96,6 @@
       "raw": "Rarity: RARE\nOracle Ring\nRuby Ring\nCatalyst: Prismatic\nCatalystQuality: 20\nLevelReq: 16\nImplicits: 1\n{tags:elemental,fire,resistance}{range:1}+(20-30)% to Fire Resistance\n{tags:attribute}{range:1}+(10-13) to all Attributes\n{tags:resistance}{range:0.5}+(20-40)% to Chaos Resistance",
       "usesVariantGroups": false
     }
-  ]
+  ],
+  "pobRevision": "dev @ ed354c2"
 }

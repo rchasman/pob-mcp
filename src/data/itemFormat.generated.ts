@@ -1,13 +1,13 @@
 // GENERATED FILE — do not edit by hand.
 // Produced by scripts/generate-item-format.mjs from Path of Building's
-// src/Classes/Item.lua (PoB 2.67.2).
+// src/Classes/Item.lua (PoB 2.67.2 (dev @ ed354c2)).
 //
 // Regenerate after updating the PoB checkout:  node scripts/generate-item-format.mjs
 // A diff here is usually a metadata key coming or going with a league mechanic;
 // see src/services/itemParser.ts.
 
 /** Path of Building version these tables were derived from. */
-export const POB_SOURCE_VERSION = "2.67.2";
+export const POB_VERSION = "2.67.2 (dev @ ed354c2)";
 
 /** Metadata keys PoB recognises on a `Key: value` item line. */
 export const SPEC_KEYS: readonly string[] = [

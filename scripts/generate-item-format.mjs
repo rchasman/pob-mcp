@@ -11,14 +11,22 @@
  *
  *   node scripts/generate-item-format.mjs [--check]
  *
- * Point POB_SOURCE at a PathOfBuilding checkout; defaults to ../PathOfBuilding.
+ * Reads POB_PATH, the same variable the Lua bridge uses: a PathOfBuilding
+ * checkout's src/ directory.
  */
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-const POB_SOURCE = process.env.POB_SOURCE ?? path.resolve("..", "PathOfBuilding");
-const ITEM_LUA = path.join(POB_SOURCE, "src", "Classes", "Item.lua");
+// POB_PATH points at the checkout's src/ directory; POB_FORK_PATH is the
+// legacy alias the bridge still accepts. Everything here wants src/, so unlike
+// pobLuaBridge there is no need to strip back to the checkout root.
+const POB_SRC =
+  process.env.POB_PATH ??
+  process.env.POB_FORK_PATH ??
+  path.resolve("..", "PathOfBuilding", "src");
+const ITEM_LUA = path.join(POB_SRC, "Classes", "Item.lua");
 const OUT = path.resolve("src", "data", "itemFormat.generated.ts");
 const checkOnly = process.argv.includes("--check");
 
@@ -28,7 +36,7 @@ function fail(msg) {
 }
 
 if (!fs.existsSync(ITEM_LUA)) {
-  fail(`cannot find ${ITEM_LUA}.\nSet POB_SOURCE to a PathOfBuilding checkout.`);
+  fail(`cannot find ${ITEM_LUA}.\nSet POB_PATH to a PathOfBuilding checkout's src/ directory.`);
 }
 const lua = fs.readFileSync(ITEM_LUA, "utf-8");
 
@@ -163,7 +171,7 @@ function standaloneFlags() {
  * `Remembrancing` Abyss jewels were added this way.
  */
 function timelessSeedPhrases() {
-  const file = path.join(POB_SOURCE, "src", "Classes", "TimelessJewelListControl.lua");
+  const file = path.join(POB_SRC, "Classes", "TimelessJewelListControl.lua");
   if (!fs.existsSync(file)) fail(`cannot find ${file}`);
   const src = fs.readFileSync(file, "utf-8");
   const phrases = new Set();
@@ -189,10 +197,22 @@ if (names.length !== descriptors.length || descriptors.length !== tags.length) {
 }
 
 const version = (() => {
-  const manifest = path.join(POB_SOURCE, "manifest.xml");
+  // manifest.xml sits at the checkout root, one level above src/.
+  const manifest = path.join(POB_SRC, "..", "manifest.xml");
   if (!fs.existsSync(manifest)) return "unknown";
-  const m = fs.readFileSync(manifest, "utf-8").match(/number="([^"]+)"/);
-  return m ? m[1] : "unknown";
+  const xml = fs.readFileSync(manifest, "utf-8");
+  const number = xml.match(/number="([^"]+)"/)?.[1] ?? "unknown";
+  // A checkout's manifest carries only the release number; the branch and commit
+  // suffix are added by PoB's updater in an installed copy. That understates a
+  // dev checkout, which can be well ahead of the release it names — variant
+  // groups, for one, exist there before any released version writes them. Record
+  // the revision when the checkout is a git working tree.
+  const root = path.dirname(manifest);
+  const git = (args) =>
+    spawnSync("git", ["-C", root, ...args], { encoding: "utf-8" }).stdout?.trim();
+  const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
+  const commit = git(["rev-parse", "--short", "HEAD"]);
+  return branch && commit ? `${number} (${branch} @ ${commit})` : number;
 })();
 
 const data = {
@@ -218,7 +238,7 @@ const out = `// GENERATED FILE — do not edit by hand.
 // see src/services/itemParser.ts.
 
 /** Path of Building version these tables were derived from. */
-export const POB_SOURCE_VERSION = ${JSON.stringify(version)};
+export const POB_VERSION = ${JSON.stringify(version)};
 
 /** Metadata keys PoB recognises on a \`Key: value\` item line. */
 export const SPEC_KEYS: readonly string[] = ${lit(data.specKeys)};
