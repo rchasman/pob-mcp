@@ -157,9 +157,11 @@ describe("itemParser — variant groups", () => {
     Selected Variant Group: 1=3
     Selected Variant Group: 2=2
     Implicits: 0
-    {group:1,2}{variant:2}Regenerate 2% of Energy Shield per Second while affected by Discipline
-    {group:1,2}{variant:3}+20% to Damage over Time Multiplier while affected by Malevolence
-    {group:1}{variant:4}Damage Penetrates 12% Lightning Resistance while affected by Wrath
+    {variant:2}{group:1}Regenerate 2% of Energy Shield per Second while affected by Discipline
+    {variant:3}{group:1}+20% to Damage over Time Multiplier while affected by Malevolence
+    {variant:4}{group:1}Damage Penetrates 12% Lightning Resistance while affected by Wrath
+    {variant:2}{group:2}Regenerate 2% of Energy Shield per Second while affected by Discipline
+    {variant:3}{group:2}+20% to Damage over Time Multiplier while affected by Malevolence
   `);
 
   it("resolves one mod per group, with no duplicates", () => {
@@ -169,24 +171,38 @@ describe("itemParser — variant groups", () => {
       [1, 3],
       [2, 2],
     ]);
-    // One line per mod in file order, not one per group: PoB writes the pool
-    // once and tags each entry with every group that may offer it.
+    // Each line names exactly one group, and only the line whose group selected
+    // its variant survives. Mods come out in file order.
     expect(parsed.mods.map((m) => m.text)).toEqual([
-      "Regenerate 2% of Energy Shield per Second while affected by Discipline",
       "+20% to Damage over Time Multiplier while affected by Malevolence",
+      "Regenerate 2% of Energy Shield per Second while affected by Discipline",
     ]);
     expect(parsed.unknown).toHaveLength(0);
   });
 
-  it("emits a mod once even when several groups could offer it", () => {
-    // Both groups list variants 2 and 3, but each selected a different one, so
-    // each mod is live through exactly one group. PoB counts a grouped line at
-    // most once (GetModLineVariantCount falls through to CheckModLineVariant
-    // unless Allow Duplicate Variants is set, which group mode never sets).
-    const parsed = parseItem(grouped);
-    const discipline = parsed.mods.filter((m) => m.text.includes("Discipline"));
-    expect(discipline).toHaveLength(1);
-    expect(discipline[0].groupIds).toEqual([1, 2]);
+  it("handles a line offered by more than one group", () => {
+    // The format allows `{group:1,2}` (makeIdSpec joins ids with commas, the
+    // same way `{variant:46,27}` already does), even though Zana's Ingenuity —
+    // the only unique using groups today — puts one group on each line.
+    const parsed = parseItem(
+      item(`
+        Rarity: UNIQUE
+        Test Ring
+        Prismatic Ring
+        Variant: None
+        Variant: A
+        Variant: B
+        Selected Variant Group: 1=3
+        Selected Variant Group: 2=2
+        Implicits: 0
+        {variant:2}{group:1,2}Shared mod
+        {variant:3}{group:1,2}Other mod
+      `)
+    );
+    // Group 2 selected variant 2 and group 1 selected variant 3, so both lines
+    // are live — but each only once, since group mode never allows duplicates.
+    expect(parsed.mods.map((m) => m.text)).toEqual(["Shared mod", "Other mod"]);
+    expect(parsed.mods[0].groupIds).toEqual([1, 2]);
   });
 
   it("drops a variant mod that belongs to no group", () => {
