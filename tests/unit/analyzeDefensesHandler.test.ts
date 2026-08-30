@@ -33,6 +33,7 @@ interface FakeClientOptions {
   chaosByDelta?: Record<number, { maxHit: number; resist: number }>;
   items?: any[];
   carrierDrifts?: boolean;
+  stats?: Record<string, number>;
 }
 
 function fakeClient(options: FakeClientOptions = {}) {
@@ -41,6 +42,7 @@ function fakeClient(options: FakeClientOptions = {}) {
 
   const withOverrides = (extra: { maxHit: number; resist: number } | null) => ({
     ...OCC_VORTEX,
+    ...options.stats,
     ...(extra ? { ChaosMaximumHitTaken: extra.maxHit, ChaosResist: extra.resist } : {}),
   });
 
@@ -104,6 +106,14 @@ describe('handleAnalyzeDefenses', () => {
     expect(text).toContain('Binding Constraint');
     expect(text).toContain('Physical    18,642  ← BINDING');
     expect(text).toContain('Chaos       39,580');
+  });
+
+  it('analyses a Chaos Inoculation build, whose Life is 1', async () => {
+    const { client } = fakeClient({ stats: { Life: 1, EnergyShield: 5251, Ward: 200 } });
+
+    const text = textOf(await handleAnalyzeDefenses(context(client), 'occ-vortex'));
+
+    expect(text).toContain('Binding Constraint');
   });
 
   it('does not sweep unless asked', async () => {
