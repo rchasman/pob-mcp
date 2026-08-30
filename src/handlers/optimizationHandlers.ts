@@ -7,10 +7,7 @@ import { analyzeDefenses, formatDefensiveAnalysis } from "../defensiveAnalyzer.j
 import { wrapHandler } from "../utils/errorHandling.js";
 import { sanitizeBuildName } from "../utils/pathSanitizer.js";
 
-/**
- * Life plus Energy Shield plus Ward of PoB's blank level 1 character, measured
- * against the engine. Any real build sits far above it, including a level 1 one.
- */
+/** PoB's blank level 1 character: 60 Life, no Energy Shield, no Ward. */
 const BLANK_CHARACTER_POOL = 60;
 
 export interface OptimizationHandlerContext {
@@ -60,11 +57,7 @@ export async function handleAnalyzeDefenses(
     // Get stats from PoB
     const stats = await luaClient.getStats();
 
-    // Validate that we have meaningful stats (not empty/default state).
-    // Guard on the whole pool, never on Life alone: PoB's blank level 1 character
-    // reports 60 Life and no Energy Shield, but a Chaos Inoculation build reports
-    // 1 Life and its entire pool as Energy Shield. Reading Life by itself rejects
-    // every CI build as unloaded.
+    // Chaos Inoculation sets Life to 1 and carries the pool as Energy Shield.
     const effectivePool = (stats.Life || 0) + (stats.EnergyShield || 0) + (stats.Ward || 0);
     if (effectivePool <= BLANK_CHARACTER_POOL) {
       throw new Error(
