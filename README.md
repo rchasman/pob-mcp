@@ -544,6 +544,11 @@ sudo apt-get install luajit  # Ubuntu/Debian
 ```
 Or set `POB_CMD` to the full path (e.g., `/opt/homebrew/bin/luajit`).
 
+**`Modules/Main.lua: '=' expected near '+'`**
+PoB's dev source writes compound assignments (`count += 1`). Current LuaJIT accepts them,
+older builds do not. Upgrade LuaJIT, or point `POB_CMD` at a newer one. Reported by
+[@notquitedrdeath](https://github.com/notquitedrdeath).
+
 **`Failed to find valid ready banner`**
 `POB_PATH` must point to the directory containing `HeadlessWrapper.lua`:
 ```bash
