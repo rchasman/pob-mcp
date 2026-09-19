@@ -1,7 +1,6 @@
 ---
 name: analyzing-pob-builds
-description: Use when analyzing a Path of Exile build through the pob MCP server: evaluating gear, affixes, crafts, anointments, passive nodes, or comparing defensive options. Also use when a pob tool reports success but stats do not move, when recommending a bench craft, or when ranking upgrades by survivability.
-allowed-tools: Read, Bash, Grep, Glob
+description: "Use when analyzing a Path of Exile build through the pob MCP server: evaluating or pricing gear, affixes, crafts, anointments, passive nodes, itemised corpses, Animate Guardian equipment, or defensive options. Also use when a pob tool reports success but stats do not move, when recommending a bench craft, or when ranking upgrades by survivability and current-league cost."
 ---
 
 # Analyzing PoB Builds
@@ -148,6 +147,66 @@ Two corollaries worth stating in any write-up:
   off-hand's resistances and gem levels; dropping the shield for a second weapon can
   invert the sign. Measure them as separate options, because players conflate them.
 
+## Price-Gate Every Recommendation
+
+An upgrade is not viable merely because it is strong in PoB. Before ranking any
+item, itemised corpse, jewel, corruption, crafted base or Animate Guardian loadout:
+
+1. Query the player's current league market, using the exact item or affix filters
+   required by the recommendation. Record the check time, cheapest credible listing,
+   and price of several available listings; ignore obvious price-fix outliers.
+2. If the market cannot be queried, ask for or use a price supplied by the player and
+   label it as player-reported. Never silently substitute an old guide's price or a
+   different league's price.
+3. Model the candidate against the freshly loaded build. Include displaced stats,
+   resistance and attribute repairs, sockets, reservation, uptime, range, minion
+   survival, and any additional items or passive points required to make it function.
+4. Report both absolute gain and value for cost: DPS/EHP or problem solved, total
+   currency cost, passive/socket opportunity cost, and whether a cheaper rare, normal
+   monster Spectre, craft, gem or flask solves most of the same problem.
+5. Rank recommendations in budget tiers. Default the actionable list to upgrades the
+   player can reasonably buy now; put multi-divine or scarce options under
+   aspirational upgrades unless the player supplied a matching budget.
+
+For itemised Spectres, the corpse price is only part of the cost. Check whether a
+free/desecratable Spectre provides a comparable effect, whether the build can keep a
+level-70 Spectre alive, and whether losing a socket group costs more PoB damage than
+the Spectre returns. For Animate Guardian, price the entire equipment set and model
+its proximity/uptime; PoB does not automatically apply the second AG ItemSet.
+
+Do not present an unpriced theoretical best-in-slot candidate as the next purchase.
+If live supply is thin or the first credible listing is several Divines, say so before
+describing its benefits and provide a genuinely affordable fallback.
+
+### Query the market programmatically
+
+Prefer the official Trade API over the Cloudflare-protected trade webpage.
+
+1. If the pob MCP exposes `get_leagues`, `search_trade_items`, `get_item_price` and
+   `compare_trade_items`, use them. Pass the exact league returned by `get_leagues`.
+   Search itemised corpses through `item_type`, not `item_name`; GGG classifies names
+   such as `Perfect Guardian Turtle` as a type and rejects them in the name field.
+2. If those tools are absent, the MCP was started without `POE_TRADE_ENABLED=true`.
+   For an exact item or corpse, run the bundled fallback:
+
+   ```
+   node scripts/price_trade_item.mjs --league Allflame --type "Perfect Guardian Turtle"
+   ```
+
+   Resolve `scripts/` relative to this `SKILL.md`. Use `--name` for actual unique-item
+   names and `--type` for bases and itemised corpses. The script performs one official
+   `/search` request and one `/fetch` request and does not require a login cookie.
+3. For rares or mod combinations, enable the MCP Trade API and use stat filters; an
+   exact-name fallback is not a substitute for pricing the required affix combination.
+4. Use `get_currency_rates` only to normalize listing currencies after collecting the
+   listings. Preserve the original listed prices in the report.
+
+Inspect 3-10 available listings rather than quoting the first result. Report the total
+listing count, check that timestamps are current, treat fewer than five results as a
+thin market, and flag a lone floor listing when the next credible listings are much
+higher. Do not use `POE_SESSION_ID` for ordinary searches; it is only needed for the
+weighted PoB-native trade query and is an account credential.
+
 ## Ranking Defensive Options
 
 **`TotalEHP` is the wrong metric for resistance decisions.** It averages across damage types, so patching your strongest element scores about the same as patching your weakest.
@@ -253,6 +312,9 @@ say so in the deliverable.
 | Chained `remove_gem` calls by index | Removes the wrong gem, plausibly | Look up by name, read the group back |
 | Comparing your DPS to an imported build's | Both exclude any second `ItemSet` | Say so, or model the guardian on both sides |
 | Ranking only uniques | Misses a T1 suffix that costs a fraction | Search `ModExplicit.lua` for the stat first |
+| Ranking an unpriced item or corpse | Theoretical upgrade may cost the character's entire budget | Check the current league market, then report gain per cost |
+| Automating the trade webpage | Cloudflare blocks or challenges the browser | Use the official Trade API or bundled fallback script |
+| Searching an itemised corpse by name | Official API returns a bad query | Search its exact `type` instead |
 | Typing an ailment magnitude once | Stale after every upgrade | Solve the fixed point, re-solve per step |
 
 ## Red Flags, Stop And Verify
@@ -267,6 +329,7 @@ say so in the deliverable.
 - A build invests in shock or chill and the ailment moves DPS by nothing when toggled
 - The same script, run twice, returns a different baseline
 - A recommendation list contains no rare and no affix
+- An item, corpse or AG loadout is ranked without a current-league price and budget tier
 - A gem swap measured a gain you cannot explain from the gem alone
 
 **All of these mean: go back and check the underlying data before answering.**
