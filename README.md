@@ -272,7 +272,7 @@ ls /path/to/PathOfBuilding/src/HeadlessWrapper.lua
 
 ## Available Tools
 
-With every optional integration enabled, the server registers **99 tools** across 10 categories.
+With every optional integration enabled, the server registers **105 tools** across 10 categories.
 
 ### XML-Based Tools (Always Available)
 
