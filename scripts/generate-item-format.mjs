@@ -11,21 +11,18 @@
  *
  *   node scripts/generate-item-format.mjs [--check]
  *
- * Reads POB_PATH, the same variable the Lua bridge uses: a PathOfBuilding
+ * Reads the engine the same way the server does: an installed PoB, or a
  * checkout's src/ directory.
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { resolvePoBLayout } from "../build/utils/pobLayout.js";
 
-// POB_PATH points at the checkout's src/ directory; POB_FORK_PATH is the
-// legacy alias the bridge still accepts. Everything here wants src/, so unlike
-// pobLuaBridge there is no need to strip back to the checkout root.
-const POB_SRC =
-  process.env.POB_PATH ??
-  process.env.POB_FORK_PATH ??
-  path.resolve("..", "PathOfBuilding", "src");
+// Resolved the way the server resolves it, so an installed PoB needs no
+// configuration. POB_PATH still wins, and points at a checkout's src/.
+const POB_SRC = resolvePoBLayout(process.env.POB_PATH || process.env.POB_FORK_PATH).src;
 const ITEM_LUA = path.join(POB_SRC, "Classes", "Item.lua");
 const OUT = path.resolve("src", "data", "itemFormat.generated.ts");
 const checkOnly = process.argv.includes("--check");
@@ -36,7 +33,7 @@ function fail(msg) {
 }
 
 if (!fs.existsSync(ITEM_LUA)) {
-  fail(`cannot find ${ITEM_LUA}.\nSet POB_PATH to a PathOfBuilding checkout's src/ directory.`);
+  fail(`cannot find ${ITEM_LUA}.\nInstall Path of Building, or set POB_PATH to the src directory of a checkout.`);
 }
 const lua = fs.readFileSync(ITEM_LUA, "utf-8");
 
@@ -197,9 +194,13 @@ if (names.length !== descriptors.length || descriptors.length !== tags.length) {
 }
 
 const version = (() => {
-  // manifest.xml sits at the checkout root, one level above src/.
-  const manifest = path.join(POB_SRC, "..", "manifest.xml");
-  if (!fs.existsSync(manifest)) return "unknown";
+  // A checkout keeps manifest.xml at its root, one level above src/. An
+  // installed app keeps it inside src/ instead.
+  const manifest = [
+    path.join(POB_SRC, "..", "manifest.xml"),
+    path.join(POB_SRC, "manifest.xml"),
+  ].find((p) => fs.existsSync(p));
+  if (!manifest) return "unknown";
   const xml = fs.readFileSync(manifest, "utf-8");
   const number = xml.match(/number="([^"]+)"/)?.[1] ?? "unknown";
   // A checkout's manifest carries only the release number; the branch and commit
@@ -212,7 +213,11 @@ const version = (() => {
     spawnSync("git", ["-C", root, ...args], { encoding: "utf-8" }).stdout?.trim();
   const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
   const commit = git(["rev-parse", "--short", "HEAD"]);
-  return branch && commit ? `${number} (${branch} @ ${commit})` : number;
+  if (branch && commit) return `${number} (${branch} @ ${commit})`;
+  // An installed app is not a git tree, so the manifest's own branch is all
+  // there is to add.
+  const manifestBranch = xml.match(/branch="([^"]+)"/)?.[1];
+  return manifestBranch ? `${number} (${manifestBranch})` : number;
 })();
 
 const data = {
@@ -282,16 +287,24 @@ export const STANDALONE_FLAGS: readonly (readonly [string, string])[] = ${lit(da
 export const TIMELESS_SEED_PHRASES: readonly string[] = ${lit(data.timelessSeedPhrases)};
 `;
 
+// Two PoB copies at the same release still name themselves differently: a dev
+// checkout carries a commit, an installed app carries only its branch. Comparing
+// that banner would report a provenance difference as a format change, so the
+// check reads the tables and ignores where they came from.
+const withoutProvenance = (text) =>
+  text.replace(/^\/\/ src\/Classes\/Item\.lua \(PoB .*\)\.$/m, "").replace(/^export const POB_VERSION = .*$/m, "");
+
 if (checkOnly) {
   const current = fs.existsSync(OUT) ? fs.readFileSync(OUT, "utf-8") : "";
-  if (current !== out) {
+  if (withoutProvenance(current) !== withoutProvenance(out)) {
     console.error(
       "generate-item-format: src/data/itemFormat.generated.ts is out of date.\n" +
-        "The PoB item format has changed. Run: node scripts/generate-item-format.mjs"
+        `The item format in PoB ${version} differs from the checked-in tables.\n` +
+        "Run: node scripts/generate-item-format.mjs"
     );
     process.exit(1);
   }
-  console.log("generate-item-format: up to date.");
+  console.log(`generate-item-format: up to date (checked against PoB ${version}).`);
 } else {
   fs.writeFileSync(OUT, out);
   console.log(
