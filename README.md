@@ -2,6 +2,12 @@
 
 An MCP (Model Context Protocol) server that enables Claude to analyze, modify, and optimize Path of Building builds using PoB's actual calculation engine.
 
+> **This is a maintained fork of [ianderse/pob-mcp](https://github.com/ianderse/pob-mcp).** Upstream has not
+> merged a change since 2026-07-21, and the contributor pull requests opened since then are still open. This fork
+> carries that work: every open upstream PR worth taking is merged here, plus offline item parsing, affix and
+> crafting lookups, non-destructive simulation, and zero-config setup against an installed Path of Building.
+> Issues and pull requests are welcome here.
+
 Works against a **stock [PathOfBuildingCommunity](https://github.com/PathOfBuildingCommunity/PathOfBuilding) checkout** — no fork, no patches. The server ships its own stdio adapter that loads PoB's `HeadlessWrapper.lua` as a library and drives the real calculation engine directly.
 
 > **PoE 3.29 compatibility:** This release targets Path of Building data and builds for the 3.29 league. Use a current PoB checkout for the matching tree, skills, and item data. Trade calls should always use `get_leagues` instead of hard-coding a challenge-league name.
