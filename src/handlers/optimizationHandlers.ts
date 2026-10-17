@@ -109,7 +109,7 @@ export async function handleAnalyzeDefenses(
         // A resistance cannot touch the physical max hit, so say so rather than
         // letting the sweep read as "this is what fixes the character".
         if (summary && binding && binding.type === 'Physical') {
-          text += `\nPhysical still owns the overall floor at ${Math.round(binding.maxHit).toLocaleString()}. ` +
+          text += `\nPhysical still owns the overall floor at ${Math.round(binding.maxHit).toLocaleString("en-US")}. ` +
             'This sweep ranks resistance purchases against each other, not against the thing that kills you first.\n';
         }
         // Carries the skip reason and any failed-restore warning.
@@ -255,7 +255,7 @@ export async function handleSuggestOptimalNodes(
       text += `Current Life: ${stats.Life || 'N/A'}\n`;
     }
     if (goal === 'damage' || goal === 'dps') {
-      text += `Current Total DPS: ${stats.TotalDPS ? Math.round(Number(stats.TotalDPS)).toLocaleString() : 'N/A'}\n`;
+      text += `Current Total DPS: ${stats.TotalDPS ? Math.round(Number(stats.TotalDPS)).toLocaleString("en-US") : 'N/A'}\n`;
     }
     if (goal === 'es') {
       text += `Current Energy Shield: ${stats.EnergyShield || 'N/A'}\n`;
@@ -352,7 +352,7 @@ export async function handleOptimizeTree(
     text += `=== Current Stats ===\n`;
     text += `Life: ${stats.Life || 'N/A'}\n`;
     text += `Energy Shield: ${stats.EnergyShield || 'N/A'}\n`;
-    text += `Total DPS: ${stats.TotalDPS ? Math.round(Number(stats.TotalDPS)).toLocaleString() : 'N/A'}\n`;
+    text += `Total DPS: ${stats.TotalDPS ? Math.round(Number(stats.TotalDPS)).toLocaleString("en-US") : 'N/A'}\n`;
     text += `Fire/Cold/Lightning Resist: ${stats.FireResist || 0}%/${stats.ColdResist || 0}%/${stats.LightningResist || 0}%\n\n`;
 
     // Recommendations based on nearby nodes

@@ -152,7 +152,7 @@ async function buildPostLoadSummary(context: LuaHandlerContext, luaClient: PoBLu
       if (s) {
         const dps = Number(s.CombinedDPS || s.TotalDPS || s.MinionTotalDPS || 0);
         const dpsLabel = (s.MinionTotalDPS && !s.TotalDPS) ? 'Minion DPS' : 'DPS';
-        summaryLines.push(`Life: ${Number(s.Life ?? 0).toLocaleString()} | ${dpsLabel}: ${Math.round(dps).toLocaleString()} | EHP: ${Number(s.TotalEHP ?? 0).toLocaleString()}`);
+        summaryLines.push(`Life: ${Number(s.Life ?? 0).toLocaleString("en-US")} | ${dpsLabel}: ${Math.round(dps).toLocaleString("en-US")} | EHP: ${Number(s.TotalEHP ?? 0).toLocaleString("en-US")}`);
         summaryLines.push(`Resists: F${s.FireResist}% C${s.ColdResist}% L${s.LightningResist}% Ch${s.ChaosResist}%`);
       }
 
@@ -429,7 +429,7 @@ export async function handleLuaGetAilments(context: LuaHandlerContext) {
         const cap = a.thresholdTable.find((r) => r.note === 'maximum');
         if (cap) {
           lines.push(
-            `  Reaches the ${cap.effect}% maximum against an ailment threshold of ${cap.ailmentThreshold.toLocaleString()} or less`,
+            `  Reaches the ${cap.effect}% maximum against an ailment threshold of ${cap.ailmentThreshold.toLocaleString("en-US")} or less`,
           );
         }
       }
@@ -1030,7 +1030,7 @@ const statNumber = (out: any, key: string): number | undefined =>
   typeof out?.[key] === 'number' ? out[key] : undefined;
 
 const formatStat = (value: number): string =>
-  Math.abs(value) >= 100 ? Math.round(value).toLocaleString() : Number(value.toFixed(2)).toString();
+  Math.abs(value) >= 100 ? Math.round(value).toLocaleString("en-US") : Number(value.toFixed(2)).toString();
 
 const formatDelta = (delta: number, before: number): string => {
   const sign = delta > 0 ? '+' : '';

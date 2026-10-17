@@ -405,5 +405,5 @@ function formatValue(value: any): string {
  * Format a number with thousands separators
  */
 function formatNumber(num: number): string {
-  return Math.round(num).toLocaleString();
+  return Math.round(num).toLocaleString("en-US");
 }

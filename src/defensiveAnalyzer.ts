@@ -159,7 +159,7 @@ export function analyzeDefenses(stats: Record<string, any>): DefensiveAnalysis {
     `${avoidanceLayer ? '✓' : '✗'} Avoidance: ${avoidance.summary}`
   );
   defensiveLayerSummary.push(
-    `${mitigationLayer ? '✓' : '✗'} Mitigation: ${mitigation.overall} (armour ${mitigation.armour.value.toLocaleString()}, PDR ${mitigation.physicalDamageReduction}%)`
+    `${mitigationLayer ? '✓' : '✗'} Mitigation: ${mitigation.overall} (armour ${mitigation.armour.value.toLocaleString("en-US")}, PDR ${mitigation.physicalDamageReduction}%)`
   );
   defensiveLayerSummary.push(
     `${recoveryLayer ? '✓' : '✗'} Recovery: ${sustain.overall} (regen ${sustain.lifeRegen.percentOfMax.toFixed(1)}%/s${sustain.hasLeech ? ', has leech' : ''})`
@@ -256,7 +256,7 @@ function generateBindingConstraintRecommendations(maxHits: MaxHitAnalysis): Reco
   const binding = maxHits.binding;
   if (!binding) return [];
 
-  const floor = `${binding.type} at ${Math.round(binding.maxHit).toLocaleString()} max hit`;
+  const floor = `${binding.type} at ${Math.round(binding.maxHit).toLocaleString("en-US")} max hit`;
   const gap = maxHits.headroomRatio
     ? ` — the next type up survives ${maxHits.headroomRatio.toFixed(2)}x more`
     : '';
@@ -272,7 +272,7 @@ function generateBindingConstraintRecommendations(maxHits: MaxHitAnalysis): Reco
         'Armour, endurance charges and flat physical reduction raise this floor',
         'So does raw life/ES, which raises every type at once',
         resisted
-          ? `If a resistance is being bought anyway, ${resisted.type} is the weakest of them at ${Math.round(resisted.maxHit).toLocaleString()}${resisted.atCap ? ' and already capped' : ` (${resisted.resist}%)`}`
+          ? `If a resistance is being bought anyway, ${resisted.type} is the weakest of them at ${Math.round(resisted.maxHit).toLocaleString("en-US")}${resisted.atCap ? ' and already capped' : ` (${resisted.resist}%)`}`
           : 'No resisted damage type reported a max hit',
       ],
       impact: 'Every other damage type has headroom, so physical is what kills this character first',
@@ -299,7 +299,7 @@ function generateBindingConstraintRecommendations(maxHits: MaxHitAnalysis): Reco
     solutions: [
       `+${Math.max(0, 75 - Number(binding.resist))}% ${binding.type} resistance reaches the 75% cap`,
       maxHits.runnerUp
-        ? `It stops paying once it passes ${maxHits.runnerUp.type} at ${Math.round(maxHits.runnerUp.maxHit).toLocaleString()}`
+        ? `It stops paying once it passes ${maxHits.runnerUp.type} at ${Math.round(maxHits.runnerUp.maxHit).toLocaleString("en-US")}`
         : 'It stops paying once it is no longer the lowest number',
       'Run analyze_defenses with sweep_resistances to measure the exact stopping point',
     ],
@@ -611,7 +611,7 @@ function generateLifePoolRecommendations(analysis: LifePoolAnalysis): Recommenda
     recs.push({
       priority: analysis.status === 'critical' ? 'critical' : 'high',
       category: 'life',
-      issue: `Total Life/ES: ${analysis.total.toLocaleString()} (${analysis.status})`,
+      issue: `Total Life/ES: ${analysis.total.toLocaleString("en-US")} (${analysis.status})`,
       solutions: [
         'Prioritize life/ES nodes on passive tree',
         'Look for +maximum life on all gear pieces',
@@ -624,7 +624,7 @@ function generateLifePoolRecommendations(analysis: LifePoolAnalysis): Recommenda
     recs.push({
       priority: 'medium',
       category: 'life',
-      issue: `Life/ES is adequate (${analysis.total.toLocaleString()}) but could be better`,
+      issue: `Life/ES is adequate (${analysis.total.toLocaleString("en-US")}) but could be better`,
       solutions: [
         'Look for opportunities to add life nodes without sacrificing too much damage',
         'Upgrade gear with higher life rolls when possible',
@@ -816,13 +816,13 @@ export function summariseResistanceSweep(
 export function formatResistanceSweep(summary: ResistanceSweepSummary): string {
   const lines: string[] = [
     `**${summary.element} Resistance Sweep (measured, one PoB calculation per step):**`,
-    `Baseline: ${summary.baseline.resist}% ${summary.element} resist, floor ${Math.round(summary.baseline.floor).toLocaleString()} (${summary.baseline.bindingType})`,
+    `Baseline: ${summary.baseline.resist}% ${summary.element} resist, floor ${Math.round(summary.baseline.floor).toLocaleString("en-US")} (${summary.baseline.bindingType})`,
   ];
 
   for (const step of summary.steps) {
     const marker = step.bindingType === summary.element ? ' ' : '←';
     lines.push(
-      `  +${step.delta}% → ${step.resist}% resist, floor ${Math.round(step.floor).toLocaleString()} (${step.bindingType}) ${marker}`
+      `  +${step.delta}% → ${step.resist}% resist, floor ${Math.round(step.floor).toLocaleString("en-US")} (${step.bindingType}) ${marker}`
     );
   }
 
@@ -830,21 +830,21 @@ export function formatResistanceSweep(summary: ResistanceSweepSummary): string {
     lines.push(
       '',
       `Stop at +${summary.stopAt.delta}%. Past that the floor belongs to ${summary.handsOverTo} ` +
-        `at ${Math.round(summary.stopAt.floor).toLocaleString()}, and more ${summary.element} resistance moves it by nothing.`,
-      `Worth buying: +${Math.round(summary.floorGain).toLocaleString()} to the lowest resisted max hit.`
+        `at ${Math.round(summary.stopAt.floor).toLocaleString("en-US")}, and more ${summary.element} resistance moves it by nothing.`,
+      `Worth buying: +${Math.round(summary.floorGain).toLocaleString("en-US")} to the lowest resisted max hit.`
     );
   } else if (summary.cappedAt !== undefined) {
     lines.push(
       '',
       `Stop at +${summary.lastImprovingDelta ?? 0}%: ${summary.element} resistance caps at ${summary.cappedAt}% ` +
         'and every point past the cap is credited as zero.',
-      `Worth buying: +${Math.round(summary.floorGain).toLocaleString()} to the lowest resisted max hit.`
+      `Worth buying: +${Math.round(summary.floorGain).toLocaleString("en-US")} to the lowest resisted max hit.`
     );
   } else {
     lines.push(
       '',
       `${summary.element} is still the binding constraint across the whole sweep, so every point measured so far pays.`,
-      `Measured gain: +${Math.round(summary.floorGain).toLocaleString()} to the lowest resisted max hit.`
+      `Measured gain: +${Math.round(summary.floorGain).toLocaleString("en-US")} to the lowest resisted max hit.`
     );
   }
 
@@ -873,7 +873,7 @@ function formatMaxHits(maxHits: MaxHitAnalysis): string {
       ? ''
       : ` [${entry.resist}% resist${Number(entry.overcap) > 0 ? `, +${entry.overcap}% overcap credited as nothing` : ''}]`;
     lines.push(
-      `${isBinding ? '🚨' : '  '} ${entry.type.padEnd(9)} ${Math.round(entry.maxHit).toLocaleString().padStart(8)}${resistNote}  ${ratio}`
+      `${isBinding ? '🚨' : '  '} ${entry.type.padEnd(9)} ${Math.round(entry.maxHit).toLocaleString("en-US").padStart(8)}${resistNote}  ${ratio}`
     );
   }
 
@@ -901,7 +901,7 @@ export function formatDefensiveAnalysis(analysis: DefensiveAnalysis): string {
     critical: '🚨',
   };
   output += `Overall: ${scoreEmoji[analysis.overallScore]} ${analysis.overallScore.toUpperCase()}\n`;
-  output += `EHP: ${analysis.lifePool.ehp.toLocaleString()} (averaged across damage types — see the binding constraint below before ranking anything)\n\n`;
+  output += `EHP: ${analysis.lifePool.ehp.toLocaleString("en-US")} (averaged across damage types — see the binding constraint below before ranking anything)\n\n`;
 
   output += formatMaxHits(analysis.maxHits);
 
@@ -922,11 +922,11 @@ export function formatDefensiveAnalysis(analysis: DefensiveAnalysis): string {
 
   // Life Pool
   output += '**Life Pool:**\n';
-  output += `Life: ${analysis.lifePool.life.toLocaleString()}\n`;
+  output += `Life: ${analysis.lifePool.life.toLocaleString("en-US")}\n`;
   if (analysis.lifePool.energyShield > 0) {
-    output += `Energy Shield: ${analysis.lifePool.energyShield.toLocaleString()}\n`;
+    output += `Energy Shield: ${analysis.lifePool.energyShield.toLocaleString("en-US")}\n`;
   }
-  output += `Total: ${analysis.lifePool.total.toLocaleString()} (${analysis.lifePool.status})\n\n`;
+  output += `Total: ${analysis.lifePool.total.toLocaleString("en-US")} (${analysis.lifePool.status})\n\n`;
 
   // Avoidance
   output += '**Avoidance Layer:**\n';
@@ -935,7 +935,7 @@ export function formatDefensiveAnalysis(analysis: DefensiveAnalysis): string {
     output += `${suppIcon} Spell Suppression: ${analysis.avoidance.spellSuppression}%${analysis.avoidance.spellSuppression >= 50 ? ' (capped)' : ' (below 50% cap)'}\n`;
   }
   if (analysis.avoidance.estimatedEvadeChance > 0) {
-    output += `  Evasion: ${analysis.avoidance.evasionRating.toLocaleString()} (~${analysis.avoidance.estimatedEvadeChance}% evade)\n`;
+    output += `  Evasion: ${analysis.avoidance.evasionRating.toLocaleString("en-US")} (~${analysis.avoidance.estimatedEvadeChance}% evade)\n`;
   }
   if (analysis.avoidance.dodge > 0) {
     output += `  Dodge: ${analysis.avoidance.dodge}%\n`;
@@ -953,7 +953,7 @@ export function formatDefensiveAnalysis(analysis: DefensiveAnalysis): string {
 
   // Mitigation
   output += '**Mitigation Layer:**\n';
-  output += `Armour: ${analysis.mitigation.armour.value.toLocaleString()} — ${analysis.mitigation.armour.effectiveness}\n`;
+  output += `Armour: ${analysis.mitigation.armour.value.toLocaleString("en-US")} — ${analysis.mitigation.armour.effectiveness}\n`;
   if (analysis.mitigation.physicalDamageReduction > 0) {
     output += `Physical Damage Reduction: ${analysis.mitigation.physicalDamageReduction}%\n`;
   }

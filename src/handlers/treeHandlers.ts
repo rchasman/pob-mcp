@@ -478,7 +478,7 @@ export async function handleGetPassiveUpgrades(
   const textLines: string[] = [
     `=== Passive Upgrades (focus: ${focus}) ===`,
     '',
-    `Base DPS: ${Math.round(baseDPS).toLocaleString()}  |  Base EHP: ${Math.round(baseEHP).toLocaleString()}`,
+    `Base DPS: ${Math.round(baseDPS).toLocaleString("en-US")}  |  Base EHP: ${Math.round(baseEHP).toLocaleString("en-US")}`,
     `Evaluated ${candidates.length} candidate notables, showing top ${top.length}:`,
     ...(skippedForeign > 0
       ? [`(skipped ${skippedForeign} node(s) this build cannot allocate)`]
@@ -490,8 +490,8 @@ export async function handleGetPassiveUpgrades(
     const { node, dpsDelta, ehpDelta, score } = top[i];
     textLines.push(`${i + 1}. **${node.name}** [${node.id}]`);
     let scoreLine = `   Score: ${score.toFixed(4)}`;
-    if (dpsDelta !== 0) scoreLine += `  |  DPS Δ: ${dpsDelta > 0 ? '+' : ''}${Math.round(dpsDelta).toLocaleString()}`;
-    if (ehpDelta !== 0) scoreLine += `  |  EHP Δ: ${ehpDelta > 0 ? '+' : ''}${Math.round(ehpDelta).toLocaleString()}`;
+    if (dpsDelta !== 0) scoreLine += `  |  DPS Δ: ${dpsDelta > 0 ? '+' : ''}${Math.round(dpsDelta).toLocaleString("en-US")}`;
+    if (ehpDelta !== 0) scoreLine += `  |  EHP Δ: ${ehpDelta > 0 ? '+' : ''}${Math.round(ehpDelta).toLocaleString("en-US")}`;
     textLines.push(scoreLine);
     if (node.stats && node.stats.length > 0) {
       for (const stat of (node.stats as string[]).slice(0, 2)) {
