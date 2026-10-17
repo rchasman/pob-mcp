@@ -236,7 +236,7 @@ export function formatIssuesResponse(issues: BuildIssue[], stats: Record<string,
   text += `Fire: ${stats.FireResist ?? 0}%  |  Cold: ${stats.ColdResist ?? 0}%  |  Lightning: ${stats.LightningResist ?? 0}%  |  Chaos: ${stats.ChaosResist ?? 0}%\n`;
   const dps = stats.CombinedDPS ?? stats.TotalDPS ?? 0;
   const minionDps = stats.MinionTotalDPS ?? 0;
-  text += `DPS: ${Number(dps).toLocaleString()}${minionDps > 0 ? `  |  Minion DPS: ${Number(minionDps).toLocaleString()}` : ''}\n`;
+  text += `DPS: ${Number(dps).toLocaleString("en-US")}${minionDps > 0 ? `  |  Minion DPS: ${Number(minionDps).toLocaleString("en-US")}` : ''}\n`;
 
   return {
     content: [{ type: 'text' as const, text }],

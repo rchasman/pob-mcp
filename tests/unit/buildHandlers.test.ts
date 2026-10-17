@@ -331,9 +331,9 @@ describe('BuildHandlers', () => {
 
       const result = await handleCompareBuilds(context, 'build1.xml', 'build2.xml');
 
-      // the handler formats with toLocaleString(), so build the expectation the
-      // same way rather than hardcoding one locale's thousands separator
-      expect(result.content[0].text).toContain((1_500_000).toLocaleString());
+      // the handler pins toLocaleString to en-US, so build the expectation the
+      // same way rather than relying on the host locale
+      expect(result.content[0].text).toContain((1_500_000).toLocaleString("en-US"));
       expect(result.content[0].text).not.toMatch(/DPS \(combined\).*N\/A/);
     });
 

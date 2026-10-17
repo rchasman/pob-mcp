@@ -102,7 +102,7 @@ export async function runResistanceSweep(
   if (!controlFloor || controlFloor.floor !== baseline.floor) {
     return {
       note: `Sweep skipped: substituting ${carrier.slot} unmodified changed the floor ` +
-        `(${Math.round(baseline.floor).toLocaleString()} → ${controlFloor ? Math.round(controlFloor.floor).toLocaleString() : 'unavailable'}), ` +
+        `(${Math.round(baseline.floor).toLocaleString("en-US")} → ${controlFloor ? Math.round(controlFloor.floor).toLocaleString("en-US") : 'unavailable'}), ` +
         'so nothing measured through it would be trustworthy.',
     };
   }

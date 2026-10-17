@@ -439,7 +439,7 @@ export class BuildExportService {
     for (let i = 0; i < result.snapshots.length; i++) {
       const { id, metadata } = result.snapshots[i];
       const date = new Date(metadata.timestamp);
-      const formattedDate = date.toLocaleString();
+      const formattedDate = date.toLocaleString("en-US");
 
       output += `${i + 1}. ${formattedDate}`;
       if (metadata.tag) {
@@ -453,8 +453,8 @@ export class BuildExportService {
 
       if (metadata.statsSnapshot) {
         const stats = metadata.statsSnapshot;
-        output += `   Stats: Life: ${stats.life?.toLocaleString() || 'N/A'} | `;
-        output += `DPS: ${stats.dps?.toLocaleString() || 'N/A'} | `;
+        output += `   Stats: Life: ${stats.life?.toLocaleString("en-US") || 'N/A'} | `;
+        output += `DPS: ${stats.dps?.toLocaleString("en-US") || 'N/A'} | `;
         output += `Nodes: ${stats.allocatedNodes || 'N/A'}\n`;
       }
 

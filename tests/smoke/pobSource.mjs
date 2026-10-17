@@ -10,7 +10,9 @@ import { resolvePoBLayout } from '../../build/utils/pobLayout.js';
  */
 export function smokePoBSrc() {
   const { src, kind } = resolvePoBLayout(process.env.POB_PATH || process.env.POB_FORK_PATH);
-  if (!existsSync(join(src, 'HeadlessWrapper.lua'))) {
+  // Launch.lua marks the engine; a Windows install has no HeadlessWrapper.lua of its own
+  // and the adapter brings a vendored one.
+  if (!existsSync(join(src, 'Launch.lua'))) {
     throw new Error(
       `No PoB engine at ${src} (resolved as ${kind}). Install Path of Building, ` +
         `or set POB_PATH to the src directory of a checkout.`

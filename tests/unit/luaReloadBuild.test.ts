@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from '@jest/globals';
+import path from 'path';
 
 const readFile = jest.fn(async (..._args: unknown[]) => '<?xml version="1.0"?><PathOfBuilding/>');
 jest.mock('fs/promises', () => ({ __esModule: true, default: { readFile } }));
@@ -23,7 +24,8 @@ describe('handleLuaReloadBuild', () => {
     await handleLuaReloadBuild(context, 'Luminary');
 
     expect(readFile).toHaveBeenCalledTimes(1);
-    expect(String(readFile.mock.calls[0][0])).toBe('/builds/Luminary.xml');
+    // the handler resolves the file, so on Windows this carries a drive and backslashes
+    expect(String(readFile.mock.calls[0][0])).toBe(path.resolve('/builds', 'Luminary.xml'));
   });
 
   // The suffix check has to be case-insensitive, matching buildFileName and the
@@ -32,7 +34,7 @@ describe('handleLuaReloadBuild', () => {
   it('treats an uppercase suffix as already present', async () => {
     await handleLuaReloadBuild(context, 'Luminary.XML');
 
-    expect(String(readFile.mock.calls[0][0])).toBe('/builds/Luminary.XML');
+    expect(String(readFile.mock.calls[0][0])).toBe(path.resolve('/builds', 'Luminary.XML'));
   });
 
   it('strips the suffix for the name handed to the bridge', async () => {
