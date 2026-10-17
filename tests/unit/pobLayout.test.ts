@@ -19,18 +19,25 @@ jest.mock('fs', () => ({
   },
 }));
 
-// Windows reports the Documents folder through PowerShell; stand in for it
-let documents: string | null = null;
-const execFileSync = jest.fn<() => string>(() => {
-  if (documents === null) throw new Error('powershell.exe: not found');
+// Windows answers two questions through PowerShell: where the installer put PoB, and
+// where Documents is. Stand in for both, keyed on what the script asks.
+let powershellAvailable = true;
+let documents = 'C:\\Users\\me\\Documents';
+let registryInstall: string | null = null;
+const execFileSync = jest.fn<(cmd: string, args: string[]) => string>((_cmd, args) => {
+  if (!powershellAvailable) throw new Error('powershell.exe: not found');
+  const script = args[args.length - 1];
+  if (script.includes('Uninstall')) return registryInstall === null ? '' : `"${registryInstall}"\r\n`;
   return `${documents}\r\n`;
 });
 jest.mock('child_process', () => ({
   __esModule: true,
-  default: { execFileSync: () => execFileSync() },
+  default: { execFileSync: (cmd: string, args: string[]) => execFileSync(cmd, args) },
 }));
+const powershellCalls = (asking: string): number =>
+  execFileSync.mock.calls.filter(([, args]) => args[args.length - 1].includes(asking)).length;
 
-import { resolvePoBLayout, defaultBuildsDirectory } from '../../src/utils/pobLayout.js';
+import { resolvePoBLayout, defaultBuildsDirectory, forgetPlatformLookups } from '../../src/utils/pobLayout.js';
 
 const realPlatform = process.platform;
 function setPlatform(value: string): void {
@@ -50,8 +57,11 @@ const savedEnv: Record<string, string | undefined> = {};
 beforeEach(() => {
   present.clear();
   contents.clear();
-  documents = null;
+  powershellAvailable = true;
+  documents = 'C:\\Users\\me\\Documents';
+  registryInstall = null;
   execFileSync.mockClear();
+  forgetPlatformLookups();
   setPlatform(realPlatform);
   for (const [key, value] of Object.entries(WIN_ENV)) {
     savedEnv[key] = process.env[key];
@@ -162,6 +172,37 @@ describe('resolvePoBLayout', () => {
       expect(layout.luaPath).toContain(path.join(WIN_APP, 'lua', '?', 'init.lua'));
     });
 
+    it('should use the location the installer recorded in the registry', () => {
+      // a hand-picked install folder shows up nowhere else
+      const chosen = 'D:\\Programs\\Path of Building Community';
+      registryInstall = chosen;
+      installWindowsApp(chosen);
+      installWindowsApp(WIN_APP);
+
+      const layout = resolvePoBLayout();
+
+      expect(layout.kind).toBe('windows-app');
+      expect(layout.src).toBe(chosen);
+    });
+
+    it('should pass over a recorded location whose folder is gone', () => {
+      registryInstall = 'E:\\old\\Path of Building Community';
+      installWindowsApp(WIN_APP);
+
+      expect(resolvePoBLayout().src).toBe(WIN_APP);
+    });
+
+    it('should ask the registry once per process', () => {
+      registryInstall = 'D:\\Programs\\Path of Building Community';
+      installWindowsApp(registryInstall);
+
+      resolvePoBLayout();
+      resolvePoBLayout();
+      defaultBuildsDirectory();
+
+      expect(powershellCalls('Uninstall')).toBe(1);
+    });
+
     it('should look in ProgramData and Program Files after APPDATA', () => {
       const older = path.join(WIN_ENV.ProgramData, 'Path of Building Community');
       installWindowsApp(older);
@@ -254,7 +295,7 @@ describe('defaultBuildsDirectory', () => {
       installWindowsApp(WIN_APP, { installed: false });
 
       expect(defaultBuildsDirectory()).toBe(path.join(WIN_APP, 'Builds'));
-      expect(execFileSync).not.toHaveBeenCalled();
+      expect(powershellCalls('GetFolderPath')).toBe(0);
     });
 
     it('should honour a custom build save path from Settings.xml', () => {
@@ -277,7 +318,7 @@ describe('defaultBuildsDirectory', () => {
     });
 
     it('should fall back to ~/Documents when PowerShell cannot be asked', () => {
-      documents = null;
+      powershellAvailable = false;
       installWindowsApp(WIN_APP);
 
       expect(defaultBuildsDirectory()).toBe(path.join(os.homedir(), 'Documents', 'Path of Building', 'Builds'));

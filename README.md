@@ -188,9 +188,10 @@ Skip to step 4 to verify.
 
 #### If you already have Path of Building installed (Windows)
 
-The server finds the installer's copy under `%APPDATA%\Path of Building Community`
-(ProgramData and Program Files are checked too) and runs the engine there with the
-DLLs and `lua\` modules it ships. A Windows PoB carries no `HeadlessWrapper.lua` or
+The server finds the installer's copy where the installer recorded it (its uninstall
+entry in the registry), or else under `%APPDATA%\Path of Building Community`,
+ProgramData or Program Files, and runs the engine there with the DLLs and `lua\`
+modules it ships. A Windows PoB carries no `HeadlessWrapper.lua` or
 `_SimpleGraphic.def.lua`, so the adapter brings its own copies (`lua/vendor/`).
 Builds come from the "Build save path" in your `Settings.xml`, or else from
 `Documents\Path of Building\Builds` as Windows resolves Documents, OneDrive included.

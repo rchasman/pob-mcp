@@ -44,10 +44,63 @@ function macAppSrcCandidates(bundle: string): string[] {
   ];
 }
 
+/** Runs one PowerShell expression and returns its UTF-8 output, or null when it cannot. */
+function powershell(expression: string): string | null {
+  try {
+    const out = childProcess.execFileSync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        `[Console]::OutputEncoding = [Text.Encoding]::UTF8; ${expression}`,
+      ],
+      { encoding: "utf8", windowsHide: true, timeout: 10_000, stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
+    return out || null;
+  } catch {
+    return null;
+  }
+}
+
+const lookups = new Map<string, string | null>();
+
+/** Each PowerShell call costs a process start, and the answers do not change while the server runs. */
+function cachedPowershell(expression: string): string | null {
+  if (!lookups.has(expression)) lookups.set(expression, powershell(expression));
+  return lookups.get(expression) ?? null;
+}
+
+/** Drops the cached Windows lookups, so a test can change what the system reports. */
+export function forgetPlatformLookups(): void {
+  lookups.clear();
+}
+
+const UNINSTALL_KEYS = [
+  "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+  "HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+  "HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
+];
+
 /**
- * The installer's default is %APPDATA%; ProgramData and Program Files are where older
- * installers and hand-picked locations put it. A portable unzip can be anywhere, so it
- * needs POB_PATH.
+ * The installer records where it put PoB under its uninstall key, so a custom location
+ * is found here and nowhere else. The value carries the quotes the installer wrote.
+ */
+function windowsRegistryInstall(): string | null {
+  const script = UNINSTALL_KEYS.map(
+    (key) => `(Get-ItemProperty -LiteralPath '${key}\\Path of Building Community' -ErrorAction SilentlyContinue).InstallLocation`,
+  ).join("; ");
+  const recorded = cachedPowershell(script)
+    ?.split(/\r?\n/)
+    .map((line) => line.trim().replace(/^"|"$/g, ""))
+    .find(Boolean);
+  return recorded ?? null;
+}
+
+/**
+ * Where the installer puts PoB when nobody picks a folder: %APPDATA% today, ProgramData
+ * and Program Files in older releases. A portable unzip can be anywhere, so it needs
+ * POB_PATH.
  */
 function windowsInstallCandidates(): string[] {
   const env = process.env;
@@ -66,7 +119,8 @@ const isWindowsApp = (dir: string): boolean =>
   exists(path.join(dir, "Launch.lua")) && exists(path.join(dir, "lua51.dll"));
 
 function findWindowsApp(): string | null {
-  return windowsInstallCandidates().find(isWindowsApp) ?? null;
+  const recorded = windowsRegistryInstall();
+  return [...(recorded ? [recorded] : []), ...windowsInstallCandidates()].find(isWindowsApp) ?? null;
 }
 
 const stripSrc = (p: string): string =>
@@ -150,22 +204,8 @@ export function resolvePoBLayout(explicitSrc?: string): PoBLayout {
  * ~/Documents, and PoB follows the shell folder, not the home directory.
  */
 function windowsDocuments(): string {
-  try {
-    const out = childProcess.execFileSync(
-      "powershell.exe",
-      [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "[Console]::OutputEncoding = [Text.Encoding]::UTF8; [Environment]::GetFolderPath('MyDocuments')",
-      ],
-      { encoding: "utf8", windowsHide: true, timeout: 10_000, stdio: ["ignore", "pipe", "ignore"] },
-    ).trim();
-    if (out) return out;
-  } catch {
-    // no PowerShell, or it was blocked: fall back to the conventional location
-  }
-  return path.join(os.homedir(), "Documents");
+  // no PowerShell, or it was blocked: fall back to the conventional location
+  return cachedPowershell("[Environment]::GetFolderPath('MyDocuments')") ?? path.join(os.homedir(), "Documents");
 }
 
 /**
