@@ -2,6 +2,25 @@
 
 local M = {}
 
+-- PoB reworked its class syntax in August 2026 (#9861): new('Item', raw) became
+-- new('Item'):Item(raw), and new() now rejects extra arguments outright. A current
+-- install is past that point and an older checkout is not, so build objects either way.
+local function construct(className, ...)
+  local ok, object = pcall(new, className, ...)
+  if not ok then
+    if not tostring(object):find('Extra argument passed to new()', 1, true) then error(object, 0) end
+    object = new(className)
+  elseif select('#', ...) > 0 then
+    return object -- the old syntax took the arguments, so it also ran the constructor
+  end
+  -- Reworked syntax: new() hands back an unconstructed object whose only legal access
+  -- is the constructor named after the class. The old syntax has no such method.
+  local constructor = object[className]
+  if type(constructor) == 'function' then return constructor(object, ...) end
+  return object
+end
+M.construct = construct
+
 -- PoB's own config option table is the only authoritative list of valid config
 -- vars and their types. Deriving from it means new upstream options work here
 -- without a code change; a hand-maintained allowlist silently drifts instead.
@@ -490,7 +509,7 @@ function M.calc_with(params)
     if not (build.itemsTab and build.itemsTab.slots and build.itemsTab.slots[params.repSlotName]) then
       return nil, 'unknown slot: ' .. params.repSlotName
     end
-    local parsed, item = pcall(new, 'Item', params.repItem)
+    local parsed, item = pcall(construct, 'Item', params.repItem)
     if not parsed then return nil, 'invalid item text: ' .. tostring(item) end
     if not item or not item.baseName then return nil, 'failed to parse item' end
     item:NormaliseQuality()
@@ -701,7 +720,7 @@ function M.add_item_text(params)
     return nil, string.format('item text too long (max %d bytes)', MAX_ITEM_TEXT_LENGTH)
   end
 
-  local ok, item = pcall(new, 'Item', params.text)
+  local ok, item = pcall(construct, 'Item', params.text)
   if not ok then return nil, 'invalid item text: ' .. tostring(item) end
   if not item or not item.baseName then return nil, 'failed to parse item' end
 
@@ -1130,7 +1149,7 @@ function M.create_spec(params)
     end
   end
   local version = (source and source.treeVersion) or (build.spec and build.spec.treeVersion) or latestTreeVersion
-  local newSpec = new('PassiveSpec', build, version)
+  local newSpec = construct('PassiveSpec', build, version)
   if source then
     -- Same copy mechanism TreeTab uses for its spec management popup
     newSpec.jewels = copyTable(source.jewels)
