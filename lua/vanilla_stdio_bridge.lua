@@ -13,8 +13,28 @@ if not GetVirtualScreenSize then
   function GetVirtualScreenSize() return 1920, 1080 end
 end
 
+-- An installed Windows PoB ships no headless files: its manifest lists neither
+-- HeadlessWrapper.lua nor _SimpleGraphic.def.lua. Vendored copies (vendor/) stand in
+-- for whichever is missing from the engine directory; an engine's own file still wins.
+local function readable(name)
+  local f = io.open(name, 'r')
+  if f then f:close() end
+  return f ~= nil
+end
+local function headlessFile(name)
+  return readable(name) and name or (ADAPTER_DIR .. 'vendor/' .. name)
+end
+
 -- The upstream wrapper initializes PoB and exposes newBuild/loadBuildFromXML plus `build`.
-dofile('HeadlessWrapper.lua')
+-- It loads the stub API by bare name from the cwd, so that one lookup is redirected
+-- while the wrapper runs; every other dofile is left alone.
+local stockDofile = dofile
+dofile = function(name)
+  if name == '_SimpleGraphic.def.lua' then return stockDofile(headlessFile(name)) end
+  return stockDofile(name)
+end
+stockDofile(headlessFile('HeadlessWrapper.lua'))
+dofile = stockDofile
 
 local BuildOps = dofile(ADAPTER_DIR .. 'pob_ops.lua')
 

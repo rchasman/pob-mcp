@@ -75,7 +75,21 @@ describe('PoBLuaApiClient', () => {
       await expect(client.start()).rejects.toThrow(/Timed out|Failed to find valid ready banner/);
     });
 
-    it('should explain a missing PoB Lua C module rather than reporting a timeout', async () => {
+    it.each<[string, string[]]>([
+      ['linux', ['luarocks', 'luautf8']],
+      // Windows has no luarocks: the module is a DLL beside Launch.lua or under runtime/
+      ['win32', ['Launch.lua', 'POB_PATH']],
+    ])('should explain a missing PoB Lua C module on %s rather than reporting a timeout', async (platform, hints) => {
+      const realPlatform = process.platform;
+      Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+      try {
+        await expectMissingModuleExplanation(hints);
+      } finally {
+        Object.defineProperty(process, 'platform', { value: realPlatform, configurable: true });
+      }
+    });
+
+    async function expectMissingModuleExplanation(hints: string[]): Promise<void> {
       client = new PoBLuaApiClient({ timeoutMs: 1000 });
 
       // PoB prints the load failure to stdout and never emits a ready banner
@@ -99,9 +113,8 @@ describe('PoBLuaApiClient', () => {
 
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toContain("module 'lua-utf8'");
-      expect((error as Error).message).toContain('luarocks');
-      expect((error as Error).message).toContain('luautf8');
-    });
+      for (const hint of hints) expect((error as Error).message).toContain(hint);
+    }
 
     it('should handle multiple non-JSON lines before ready banner', async () => {
       mockSpawn.mockImplementationOnce(() => {

@@ -120,8 +120,8 @@ npm run build
 
 #### With the Lua Bridge
 
-If PoB is installed (macOS), this is the whole configuration. `POB_PATH`, `POB_DIRECTORY`
-and `POB_CMD` are detected from the installed app.
+If PoB is installed (macOS or Windows), this is the whole configuration. `POB_PATH` and
+`POB_DIRECTORY` are detected from the installed app; `POB_CMD` is `luajit` on PATH.
 
 ```json
 {
@@ -138,20 +138,25 @@ and `POB_CMD` are detected from the installed app.
 ```
 
 Set `POB_PATH` explicitly only when driving a PathOfBuilding git checkout instead of an
-installed app, or when the app lives somewhere unusual:
+installed app, or when the app lives somewhere unusual, such as a portable unzip:
 
 ```json
         "POB_PATH": "/path/to/PathOfBuilding/src",
         "POB_CMD": "/opt/homebrew/bin/luajit"
 ```
 
+```json
+        "POB_PATH": "D:\\Games\\PathOfBuilding",
+        "POB_CMD": "C:\\Tools\\LuaJIT\\luajit.exe"
+```
+
 ### Environment Variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `POB_DIRECTORY` | detected Builds dir | Path to your PoB builds directory |
+| `POB_DIRECTORY` | detected Builds dir | Path to your PoB builds directory. On Windows: the build save path from PoB's `Settings.xml`, else `Documents\Path of Building\Builds` as Windows resolves Documents; a portable PoB keeps `Builds\` beside itself |
 | `POB_LUA_ENABLED` | `false` | Set `"true"` to enable Lua bridge |
-| `POB_PATH` | installed PoB app, else `~/Projects/PathOfBuilding/src` | `src/` of a stock PathOfBuilding checkout. Usually unnecessary: an installed PoB is detected automatically (`POB_FORK_PATH` is a legacy alias) |
+| `POB_PATH` | installed PoB app, else `~/Projects/PathOfBuilding/src` | `src/` of a stock PathOfBuilding checkout, or the folder of a portable Windows PoB. Usually unnecessary: an installed PoB is detected automatically (`POB_FORK_PATH` is a legacy alias) |
 | `POB_CMD` | `luajit` | LuaJIT binary path |
 | `POB_TIMEOUT_MS` | `10000` | Lua request timeout (ms) |
 | `POB_DEBUG` | `false` | Set `"true"` for verbose Lua bridge logging |
@@ -181,6 +186,31 @@ non-Windows build of in the repo.
 
 Skip to step 4 to verify.
 
+#### If you already have Path of Building installed (Windows)
+
+The server finds the installer's copy under `%APPDATA%\Path of Building Community`
+(ProgramData and Program Files are checked too) and runs the engine there with the
+DLLs and `lua\` modules it ships. A Windows PoB carries no `HeadlessWrapper.lua` or
+`_SimpleGraphic.def.lua`, so the adapter brings its own copies (`lua/vendor/`).
+Builds come from the "Build save path" in your `Settings.xml`, or else from
+`Documents\Path of Building\Builds` as Windows resolves Documents, OneDrive included.
+
+A portable unzip can live anywhere, so name its folder (the one holding `Launch.lua`
+and `Path of Building.exe`) in `POB_PATH`; its builds are in `Builds\` beside it.
+
+What you still need is a 64-bit LuaJIT 2.1 built from source on or after 2026-07-20,
+when LuaJIT learned the `count += 1` compound assignments PoB's source uses. Prebuilt
+packages mostly predate that and fail with `'=' expected near '+'`:
+
+```powershell
+git clone https://github.com/LuaJIT/LuaJIT
+cd LuaJIT
+mingw32-make            # MinGW-w64; or run msvcbuild.bat from an x64 Visual Studio prompt
+```
+
+Keep `lua51.dll` beside `src\luajit.exe`, then add that folder to PATH or set `POB_CMD`
+to the full path of `luajit.exe`. Skip to step 4 to verify.
+
 #### Working from a PathOfBuilding checkout instead
 
 #### 1. Install LuaJIT
@@ -191,7 +221,7 @@ brew install luajit
 # Ubuntu/Debian
 sudo apt-get install luajit
 
-# Windows: download from https://luajit.org/ and add to PATH
+# Windows: build from source as in the Windows section above, add luajit.exe to PATH
 ```
 
 #### 2. Install PoB's Lua C modules (macOS and Linux)
@@ -545,15 +575,17 @@ sudo apt-get install luajit  # Ubuntu/Debian
 Or set `POB_CMD` to the full path (e.g., `/opt/homebrew/bin/luajit`).
 
 **`Modules/Main.lua: '=' expected near '+'`**
-PoB's dev source writes compound assignments (`count += 1`). Current LuaJIT accepts them,
-older builds do not. Upgrade LuaJIT, or point `POB_CMD` at a newer one. Reported by
-[@notquitedrdeath](https://github.com/notquitedrdeath).
+PoB's dev source writes compound assignments (`count += 1`). LuaJIT accepts them since
+2026-07-20, older builds do not. Upgrade LuaJIT, or point `POB_CMD` at a newer one; on
+Windows that means building it from source, as prebuilt packages predate the change.
+Reported by [@notquitedrdeath](https://github.com/notquitedrdeath).
 
 **`Failed to find valid ready banner`**
-`POB_PATH` must point to the directory containing `HeadlessWrapper.lua`:
+`POB_PATH` must point to the directory containing `Launch.lua`: a checkout's `src/`, or
+the folder of an installed or portable Windows PoB:
 ```bash
-ls "$POB_PATH/HeadlessWrapper.lua"   # must exist
-ls "$POB_PATH/Modules/"              # must exist
+ls "$POB_PATH/Launch.lua"   # must exist
+ls "$POB_PATH/Modules/"     # must exist
 ```
 
 **`Timed out waiting for response`**

@@ -7,6 +7,7 @@ This document outlines how we will integrate the forked Path of Building (PoB) h
 - Fork location: `~/Projects/PathOfBuilding` (API server runs from `~/Projects/PathOfBuilding/src`).
 - Transport: stdio JSON lines (one line per request/response), long‑lived process. Optional TCP (embedded in GUI) on 127.0.0.1:POB_API_TCP_PORT.
 - Bridge: `src/pobLuaBridge.ts` spawns and talks to the PoB API.
+- Engine layouts (`src/utils/pobLayout.ts`): a git checkout (`src/` beside `runtime/`), the installed macOS app, or an installed/portable Windows PoB (one flat folder; it ships no headless files, so the adapter vendors them in `lua/vendor/`).
 - Rollout: Feature‑flagged; graceful fallback to current XML‑only analysis if headless is unavailable.
 
 ## Architecture

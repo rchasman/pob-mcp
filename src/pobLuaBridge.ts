@@ -18,6 +18,14 @@ const ROCK_BY_LUA_MODULE: Record<string, string> = {
 
 /** PoB reports this on stdout and then blocks, so the bare symptom is a startup timeout. */
 function missingLuaModuleMessage(moduleName: string): string {
+  if (process.platform === "win32") {
+    return (
+      `Failed to start PoB Lua Bridge: PoB could not load the Lua module '${moduleName}'.\n\n` +
+      `On Windows it ships as ${moduleName}.dll: beside Launch.lua in an installed or portable\n` +
+      `Path of Building, and under runtime/ in a checkout. Point POB_PATH at one of those.\n\n` +
+      `PoB's DLLs are 64-bit builds, so POB_CMD must name a 64-bit LuaJIT.`
+    );
+  }
   const rock = ROCK_BY_LUA_MODULE[moduleName];
   return (
     `Failed to start PoB Lua Bridge: PoB could not load the Lua module '${moduleName}'.\n\n` +
