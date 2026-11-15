@@ -13,6 +13,27 @@ if not GetVirtualScreenSize then
   function GetVirtualScreenSize() return 1920, 1080 end
 end
 
+-- PoB's launcher files open with a `#@` line that PoB's own runtime skips.
+-- LuaJIT since c41d727d (Oct 2026) parses a leading `#` as a line number
+-- directive and skips only `#!`, so the header becomes a comment here. The
+-- replacement keeps the line count, so error line numbers stay correct.
+local loadfileWithHashLine = loadfile
+local dofileWithHashLine = dofile
+
+function loadfile(path)
+  if path == nil then return loadfileWithHashLine() end
+  local file = io.open(path, 'rb')
+  if not file then return nil, 'cannot open ' .. path end
+  local source = file:read('*a')
+  file:close()
+  return loadstring((source:gsub('^#', '--', 1)), '@' .. path)
+end
+
+function dofile(path)
+  if path == nil then return dofileWithHashLine() end
+  return assert(loadfile(path))()
+end
+
 -- The upstream wrapper initializes PoB and exposes newBuild/loadBuildFromXML plus `build`.
 dofile('HeadlessWrapper.lua')
 
@@ -114,9 +135,18 @@ local function generate_weighted_trade_query(params)
   options.statWeights = options.statWeights or build.itemsTab.tradeQuery.statSortSelectionList
   if not options.statWeights or #options.statWeights == 0 then options.statWeights = { { label = 'Full DPS', stat = 'FullDPS', weightMult = 1.0 }, { label = 'Effective Hit Pool', stat = 'TotalEHP', weightMult = 0.5 } } end
   local ok, result = pcall(function()
-    local generator = new('TradeQueryGenerator', build.itemsTab.tradeQuery)
+    local generator = BuildOps.construct('TradeQueryGenerator', build.itemsTab.tradeQuery)
     local query, warning
-    generator.requesterCallback = function(_, generated, err) query, warning = generated, err end
+    -- PoB 2.67 hands over the whole request body as JSON. PoB dev (3.30) hands
+    -- over only the inner query table and adds sort and engine in TradeQuery.
+    generator.requesterCallback = function(_, generated, err)
+      if type(generated) == 'table' then
+        query = { query = generated, sort = { ['statgroup.0'] = 'desc' }, engine = 'new' }
+      else
+        query = generated
+      end
+      warning = err
+    end
     generator.requesterContext = {}
     generator.tradeTypeIndex = 2 -- available listings, matching the MCP default
     generator:StartQuery(slot, options)
