@@ -1,17 +1,7 @@
 {
-  "name": "@rchasman/pob-mcp-server",
+  "name": "pob-mcp-server",
   "version": "1.0.1",
-  "description": "MCP server driving Path of Building's real calculation engine. Maintained fork of ianderse/pob-mcp.",
-  "license": "GPL-3.0-or-later",
-  "author": "Roey D. Chasman <rchasman@gmail.com>",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/rchasman/pob-mcp.git"
-  },
-  "homepage": "https://github.com/rchasman/pob-mcp#readme",
-  "bugs": {
-    "url": "https://github.com/rchasman/pob-mcp/issues"
-  },
+  "description": "MCP server for Path of Building integration",
   "main": "build/index.js",
   "type": "module",
   "scripts": {
