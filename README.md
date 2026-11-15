@@ -1,12 +1,10 @@
 # Path of Building MCP Server
 
-An MCP (Model Context Protocol) server that enables Claude to analyze, modify, and optimize Path of Building builds using PoB's actual calculation engine.
+> **Development has moved back to [ianderse/pob-mcp](https://github.com/ianderse/pob-mcp).** This fork carried
+> work while upstream was not merging. Upstream merged that work in October 2026, and the rest is going there
+> as pull requests. Open issues and pull requests on upstream, not here.
 
-> **This is a maintained fork of [ianderse/pob-mcp](https://github.com/ianderse/pob-mcp).** Upstream has not
-> merged a change since 2026-07-21, and the contributor pull requests opened since then are still open. This fork
-> carries that work: every open upstream PR worth taking is merged here, plus offline item parsing, affix and
-> crafting lookups, non-destructive simulation, and zero-config setup against an installed Path of Building.
-> Issues and pull requests are welcome here.
+An MCP (Model Context Protocol) server that enables Claude to analyze, modify, and optimize Path of Building builds using PoB's actual calculation engine.
 
 Works against a **stock [PathOfBuildingCommunity](https://github.com/PathOfBuildingCommunity/PathOfBuilding) checkout** — no fork, no patches. The server ships its own stdio adapter that loads PoB's `HeadlessWrapper.lua` as a library and drives the real calculation engine directly.
 
